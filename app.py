@@ -88,7 +88,6 @@ def generate_interactive_quiz(notes_text, num_questions=5):
         return None
 
 def generate_flashcards_json(notes_text, num_cards=5):
-    """Genera flashcards formateadas en JSON para el renderizado HTML interactivo."""
     prompt = f"""
     Eres un profesor experto. Crea exactamente {num_cards} fichas de estudio (flashcards) sobre estos apuntes.
     DEBES responder ÚNICAMENTE en formato JSON válido.
@@ -117,8 +116,33 @@ def generate_flashcards_json(notes_text, num_cards=5):
     except Exception:
         return None
 
+def generate_concept_map_dot(notes_text):
+    """Genera código DOT (Graphviz) estructurado para dibujar el mapa conceptual."""
+    prompt = f"""
+    Eres un diseñador de mapas conceptuales e infografías educativas.
+    Analiza el texto facilitado y genera un código Graphviz en formato DOT válido.
+
+    Instrucciones de formato:
+    - Usa 'digraph G {{ ... }}'.
+    - Agrega estilo a los nodos: `node [shape=box, style="filled,rounded", color="#2b2d42", fontcolor=white, fontname="Helvetica"];`
+    - Diseña relaciones conceptuales claras (Ejemplo: "Concepto A" -> "Concepto B" [label="relación"]).
+    - Mantén las etiquetas breves y precisas.
+    - DEVUELVE ÚNICAMENTE EL CÓDIGO DOT SIN BLOQUES MARKDOWN NI TEXTO ADICIONAL.
+
+    Apuntes:
+    {notes_text}
+    """
+    raw_response = safe_gemini_call(prompt)
+    cleaned = raw_response.strip()
+    if cleaned.startswith("```dot"):
+        cleaned = cleaned[6:]
+    if cleaned.startswith("```"):
+        cleaned = cleaned[3:]
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+    return cleaned.strip()
+
 def render_flip_card(front_text, back_text, card_id):
-    """Genera el componente HTML + CSS + JS de la tarjeta 3D con efecto Flip."""
     card_html = f"""
     <!DOCTYPE html>
     <html>
@@ -206,7 +230,7 @@ def render_flip_card(front_text, back_text, card_id):
 # --- INTERFAZ PRINCIPAL ---
 
 st.title("🤖 AI Study BGA")
-st.caption("Sube tus apuntes y conviértelos en resúmenes, quizzes y tarjetas interactivas.")
+st.caption("Sube tus apuntes y conviértelos en resúmenes, quizzes, tarjetas y mapas conceptuales.")
 
 if not api_key:
     st.error("⚠️ No se encontró la GEMINI_API_KEY. Configúrala en Secrets (Streamlit Cloud) o en tu archivo .env.")
@@ -232,7 +256,7 @@ if submit_text or uploaded_file is not None:
 # --- PESTAÑAS ---
 if st.session_state.notes_content:
     st.success("✅ Apuntes cargados correctamente.")
-    tab1, tab2, tab3 = st.tabs(["📌 Resumen", "❓ Quiz Interactivo", "🎴 Flashcards (Flip Card)"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📌 Resumen", "❓ Quiz Interactivo", "🎴 Flashcards", "🗺️ Mapa Conceptual"])
 
     # 1. RESUMEN
     with tab1:
@@ -329,7 +353,7 @@ if st.session_state.notes_content:
                 if score_percentage >= 70:
                     st.balloons()
 
-    # 3. FLASHCARDS CON EFECTO FLIP
+    # 3. FLASHCARDS
     with tab3:
         st.subheader("🎴 Fichas de Estudio Interactivas")
         num_f = st.slider("Número de fichas:", min_value=1, max_value=10, value=5)
@@ -344,6 +368,23 @@ if st.session_state.notes_content:
             st.info("💡 Haz clic sobre cualquier tarjeta para voltearla y descubrir el reverso.")
             for idx, card in enumerate(st.session_state["flashcards_data"]):
                 render_flip_card(card["front"], card["back"], card_id=idx)
+
+    # 4. MAPA CONCEPTUAL (GRAPHVIZ)
+    with tab4:
+        st.subheader("🗺️ Mapa Conceptual de los Apuntes")
+        st.caption("Genera un diagrama jerárquico automatizado para conectar las ideas principales.")
+
+        if st.button("Generar Mapa Conceptual 🗺️", type="primary"):
+            with st.spinner("Diseñando diagrama de flujo y relaciones de temas..."):
+                dot_code = generate_concept_map_dot(st.session_state.notes_content)
+                if dot_code:
+                    st.session_state["concept_map_dot"] = dot_code
+
+        if "concept_map_dot" in st.session_state:
+            try:
+                st.graphviz_chart(st.session_state["concept_map_dot"])
+            except Exception as e:
+                st.error("No se pudo estructurar el diagrama automáticamente. Inténtalo de nuevo.")
 
 else:
     st.info("💡 Por favor, sube un archivo o escribe tus notas arriba para empezar.")
