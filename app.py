@@ -12,7 +12,7 @@ api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key) if api_key else None
 
 # Configuración de la página en Streamlit
-st.set_page_config(page_title="AI Study Buddy", page_icon="🤖", layout="centered")
+st.set_page_config(page_title="AI Study BGA", page_icon="🤖", layout="centered")
 
 # --- FUNCIONES AUXILIARES ---
 
@@ -34,7 +34,7 @@ Notes:
 {notes_text}
 """
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.5
     )
