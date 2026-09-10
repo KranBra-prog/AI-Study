@@ -2,6 +2,7 @@ import os
 import json
 import time
 import streamlit as st
+import streamlit.components.v1 as components
 import PyPDF2
 from dotenv import load_dotenv
 from google import genai
@@ -15,7 +16,7 @@ client = genai.Client(api_key=api_key) if api_key else None
 
 st.set_page_config(page_title="AI Study BGA", page_icon="🤖", layout="centered")
 
-# --- INICIALIZACIÓN DEL ESTADO DE SESIÓN (st.session_state) ---
+# --- ESTADO DE SESIÓN ---
 if "notes_content" not in st.session_state:
     st.session_state.notes_content = ""
 if "quiz_data" not in st.session_state:
@@ -27,7 +28,7 @@ if "quiz_answers" not in st.session_state:
 if "start_time" not in st.session_state:
     st.session_state.start_time = None
 if "time_limit" not in st.session_state:
-    st.session_state.time_limit = 60  # Tiempo por defecto en segundos
+    st.session_state.time_limit = 60
 
 # --- FUNCIONES AUXILIARES ---
 
@@ -54,24 +55,19 @@ def generate_summary(notes_text):
     prompt = f"Eres un profesor experto. Genera un resumen conciso y bien estructurado de estos apuntes:\n\n{notes_text}"
     return safe_gemini_call(prompt)
 
-def generate_flashcards(notes_text, num_cards=5):
-    prompt = f"Crea {num_cards} fichas de estudio (flashcards) basadas en estos apuntes. Formatea cada una como:\n**Frente (Concepto/Pregunta):** ...\n**Reverso (Respuesta/Explicación):** ...\n\n{notes_text}"
-    return safe_gemini_call(prompt)
-
 def generate_interactive_quiz(notes_text, num_questions=5):
-    """Solicita a Gemini un JSON estricto con las preguntas, opciones, respuesta correcta y explicación."""
     prompt = f"""
     Eres un profesor experto. Basándote en el siguiente texto, genera exactamente {num_questions} preguntas de opción múltiple.
-    DEBES responder ÚNICAMENTE en formato JSON válido, sin texto adicional ni bloques de formato markdown innecesarios.
+    DEBES responder ÚNICAMENTE en formato JSON válido, sin texto adicional.
 
-    Estructura esperada del JSON:
+    Estructura esperada:
     [
       {{
         "id": 1,
         "question": "Texto de la pregunta...",
         "options": ["Opción A", "Opción B", "Opción C", "Opción D"],
         "correct_index": 0,
-        "explanation": "Explicación breve de por qué esta opción es la correcta."
+        "explanation": "Explicación breve."
       }}
     ]
 
@@ -80,7 +76,6 @@ def generate_interactive_quiz(notes_text, num_questions=5):
     """
     raw_response = safe_gemini_call(prompt)
     try:
-        # Limpiar posibles marcadores de bloque de código json
         cleaned = raw_response.strip()
         if cleaned.startswith("```json"):
             cleaned = cleaned[7:]
@@ -89,27 +84,140 @@ def generate_interactive_quiz(notes_text, num_questions=5):
         if cleaned.endswith("```"):
             cleaned = cleaned[:-3]
         return json.loads(cleaned.strip())
-    except Exception as e:
-        st.error("Error al procesar el formato del cuestionario. Reintentando...")
+    except Exception:
         return None
+
+def generate_flashcards_json(notes_text, num_cards=5):
+    """Genera flashcards formateadas en JSON para el renderizado HTML interactivo."""
+    prompt = f"""
+    Eres un profesor experto. Crea exactamente {num_cards} fichas de estudio (flashcards) sobre estos apuntes.
+    DEBES responder ÚNICAMENTE en formato JSON válido.
+
+    Estructura esperada:
+    [
+      {{
+        "front": "Pregunta o concepto clave...",
+        "back": "Respuesta o explicación detallada..."
+      }}
+    ]
+
+    Apuntes:
+    {notes_text}
+    """
+    raw_response = safe_gemini_call(prompt)
+    try:
+        cleaned = raw_response.strip()
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]
+        if cleaned.startswith("```"):
+            cleaned = cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        return json.loads(cleaned.strip())
+    except Exception:
+        return None
+
+def render_flip_card(front_text, back_text, card_id):
+    """Genera el componente HTML + CSS + JS de la tarjeta 3D con efecto Flip."""
+    card_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+    .flip-card {{
+      background-color: transparent;
+      width: 100%;
+      height: 200px;
+      perspective: 1000px;
+      margin-bottom: 20px;
+      font-family: system-ui, -apple-system, sans-serif;
+    }}
+
+    .flip-card-inner {{
+      position: relative;
+      width: 100%;
+      height: 100%;
+      text-align: center;
+      transition: transform 0.6s;
+      transform-style: preserve-3d;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      border-radius: 12px;
+    }}
+
+    .flip-card.flipped .flip-card-inner {{
+      transform: rotateY(180deg);
+    }}
+
+    .flip-card-front, .flip-card-back {{
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      box-sizing: border-box;
+    }}
+
+    .flip-card-front {{
+      background-color: #2b2d42;
+      color: #edf2f4;
+      border: 2px solid #8d99ae;
+    }}
+
+    .flip-card-back {{
+      background-color: #d90429;
+      color: #ffffff;
+      transform: rotateY(180deg);
+    }}
+
+    .hint {{
+      font-size: 12px;
+      opacity: 0.7;
+      margin-top: 10px;
+    }}
+    </style>
+    </head>
+    <body>
+
+    <div class="flip-card" id="card-{card_id}" onclick="this.classList.toggle('flipped')">
+      <div class="flip-card-inner">
+        <div class="flip-card-front">
+          <strong style="font-size: 16px;">{front_text}</strong>
+          <span class="hint">👆 Haz clic para ver el reverso</span>
+        </div>
+        <div class="flip-card-back">
+          <p style="font-size: 15px; margin: 0;">{back_text}</p>
+          <span class="hint">🔄 Haz clic para voltear</span>
+        </div>
+      </div>
+    </div>
+
+    </body>
+    </html>
+    """
+    components.html(card_html, height=220)
 
 # --- INTERFAZ PRINCIPAL ---
 
-st.title("🤖 AI Study BGA")
-st.caption("Sube tus apuntes y pon a prueba tus conocimientos de forma interactiva.")
+st.title("🤖 AI Study Buddy BGA")
+st.caption("Sube tus apuntes y conviértelos en resúmenes, quizzes y tarjetas interactivas.")
 
 if not api_key:
     st.error("⚠️ No se encontró la GEMINI_API_KEY. Configúrala en Secrets (Streamlit Cloud) o en tu archivo .env.")
     st.stop()
 
-# --- CARGA DE TEXTO CON BOTÓN ENTER ---
+# --- CARGA DE TEXTO ---
 st.subheader("📄 Carga tus apuntes")
-
 uploaded_file = st.file_uploader("Sube tus apuntes (PDF o TXT)", type=["pdf", "txt"])
 
 with st.form("notes_form", clear_on_submit=False):
     text_input = st.text_area("O pega directamente tus notas aquí:", height=150)
-    # Al presionar Enter estando dentro del formulario o dar clic al botón, se procesa el texto
     submit_text = st.form_submit_button("Procesar Texto ↵")
 
 if submit_text or uploaded_file is not None:
@@ -121,10 +229,10 @@ if submit_text or uploaded_file is not None:
     elif text_input.strip():
         st.session_state.notes_content = text_input.strip()
 
-# --- PESTAÑAS DE TRABAJO ---
+# --- PESTAÑAS ---
 if st.session_state.notes_content:
     st.success("✅ Apuntes cargados correctamente.")
-    tab1, tab2, tab3 = st.tabs(["📌 Resumen", "❓ Quiz Interactivo", "🎴 Flashcards"])
+    tab1, tab2, tab3 = st.tabs(["📌 Resumen", "❓ Quiz Interactivo", "🎴 Flashcards (Flip Card)"])
 
     # 1. RESUMEN
     with tab1:
@@ -133,11 +241,9 @@ if st.session_state.notes_content:
             with st.spinner("Procesando resumen..."):
                 st.markdown(generate_summary(st.session_state.notes_content))
 
-    # 2. QUIZ INTERACTIVO PARA ALUMNOS
+    # 2. QUIZ INTERACTIVO
     with tab2:
         st.subheader(" Cuestionario Interactivo")
-
-        # Controles de configuración antes de iniciar
         col_q, col_t = st.columns(2)
         with col_q:
             num_q = st.slider("Número de preguntas:", min_value=1, max_value=10, value=5)
@@ -145,7 +251,7 @@ if st.session_state.notes_content:
             seconds_per_q = st.number_input("Segundos por pregunta:", min_value=10, max_value=120, value=30)
 
         if st.button("🚀 Comenzar Quiz", type="primary"):
-            with st.spinner("Generando preguntas y opciones..."):
+            with st.spinner("Generando preguntas..."):
                 data = generate_interactive_quiz(st.session_state.notes_content, num_questions=num_q)
                 if data:
                     st.session_state.quiz_data = data
@@ -155,18 +261,15 @@ if st.session_state.notes_content:
                     st.session_state.start_time = time.time()
                     st.rerun()
 
-        # RENDERIZADO DEL QUIZ EN CURSO
         if st.session_state.quiz_data:
             total_time = st.session_state.time_limit
             elapsed = time.time() - st.session_state.start_time if st.session_state.start_time else 0
             remaining = max(0, int(total_time - elapsed))
 
-            # TEMPORIZADOR Y BARRA DE PROGRESO TRICOLOR (Verde / Amarillo / Rojo)
             if not st.session_state.quiz_submitted:
                 percent_left = remaining / total_time
                 st.write(f"⏱️ **Tiempo restante:** `{remaining} segundos`")
 
-                # Lógica del color de la barra de progreso
                 if percent_left > 0.5:
                     st.markdown("""<style>.stProgress > div > div > div > div { background-color: #28a745 !important; }</style>""", unsafe_allow_html=True)
                 elif percent_left > 0.2:
@@ -177,18 +280,17 @@ if st.session_state.notes_content:
                 st.progress(percent_left)
 
                 if remaining == 0:
-                    st.warning("⏰ ¡Se agotó el tiempo! Evaluando respuestas hasta el momento...")
+                    st.warning("⏰ ¡Tiempo agotado!")
                     st.session_state.quiz_submitted = True
                     st.rerun()
 
             st.divider()
 
-            # FORMULARIO DE RESPUESTAS
             with st.form("quiz_form"):
                 for q_idx, q in enumerate(st.session_state.quiz_data):
                     st.write(f"**Pregunta {q_idx + 1}:** {q['question']}")
                     selected_option = st.radio(
-                        label=f"Selecciona una opción para la pregunta {q_idx + 1}:",
+                        label=f"Selecciona una opción ({q_idx + 1}):",
                         options=q["options"],
                         key=f"q_{q_idx}",
                         disabled=st.session_state.quiz_submitted
@@ -201,11 +303,9 @@ if st.session_state.notes_content:
                     st.session_state.quiz_submitted = True
                     st.rerun()
 
-            # MOSTRAR RESULTADOS Y RETROALIMENTACIÓN
             if st.session_state.quiz_submitted:
                 correct_count = 0
                 total_q = len(st.session_state.quiz_data)
-
                 st.subheader("📊 Resultados Finales")
 
                 for q_idx, q in enumerate(st.session_state.quiz_data):
@@ -223,23 +323,27 @@ if st.session_state.notes_content:
                     st.info(f"💡 **Explicación:** {q['explanation']}")
                     st.write("---")
 
-                # VISUALIZACIÓN DE PUNTAJE FINAL
                 score_percentage = (correct_count / total_q) * 100
                 st.metric(label="Puntuación Final", value=f"{correct_count} / {total_q}", delta=f"{score_percentage:.1f}%")
 
                 if score_percentage >= 70:
                     st.balloons()
-                    st.success("🎉 ¡Excelente trabajo! Has demostrado una gran comprensión de los temas.")
-                else:
-                    st.warning("📚 Te sugerimos repasar los puntos clave y volver a intentarlo.")
 
-    # 3. FLASHCARDS
+    # 3. FLASHCARDS CON EFECTO FLIP
     with tab3:
-        st.subheader("Fichas de Estudio (Flashcards)")
+        st.subheader("🎴 Fichas de Estudio Interactivas")
         num_f = st.slider("Número de fichas:", min_value=1, max_value=10, value=5)
-        if st.button("Generar Flashcards", type="primary"):
-            with st.spinner("Generando flashcards..."):
-                st.markdown(generate_flashcards(st.session_state.notes_content, num_cards=num_f))
+
+        if st.button("Generar Flashcards 🎴", type="primary"):
+            with st.spinner("Generando tarjetas interactivas..."):
+                cards_data = generate_flashcards_json(st.session_state.notes_content, num_cards=num_f)
+                if cards_data:
+                    st.session_state["flashcards_data"] = cards_data
+
+        if "flashcards_data" in st.session_state:
+            st.info("💡 Haz clic sobre cualquier tarjeta para voltearla y descubrir el reverso.")
+            for idx, card in enumerate(st.session_state["flashcards_data"]):
+                render_flip_card(card["front"], card["back"], card_id=idx)
 
 else:
-    st.info("💡 Por favor, sube un archivo o escribe tus notas arriba y presiona 'Procesar Texto' para empezar.")
+    st.info("💡 Por favor, sube un archivo o escribe tus notas arriba para empezar.")
