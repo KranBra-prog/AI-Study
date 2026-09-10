@@ -205,7 +205,7 @@ def render_flip_card(front_text, back_text, card_id):
 
 # --- INTERFAZ PRINCIPAL ---
 
-st.title("🤖 AI Study Buddy BGA")
+st.title("🤖 AI Study BGA")
 st.caption("Sube tus apuntes y conviértelos en resúmenes, quizzes y tarjetas interactivas.")
 
 if not api_key:
