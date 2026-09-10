@@ -369,22 +369,31 @@ if st.session_state.notes_content:
             for idx, card in enumerate(st.session_state["flashcards_data"]):
                 render_flip_card(card["front"], card["back"], card_id=idx)
 
-    # 4. MAPA CONCEPTUAL (GRAPHVIZ)
+    # 4. INFOGRAFÍA Y ESQUEMAS (Solo Mapa Conceptual)
     with tab4:
-        st.subheader("🗺️ Mapa Conceptual de los Apuntes")
-        st.caption("Genera un diagrama jerárquico automatizado para conectar las ideas principales.")
+        st.subheader("🗺️ Esquema Conceptual de Apuntes")
+        
+        # Eliminamos las sub-pestañas y mostramos el mapa conceptual directamente
+        st.caption("Diagrama jerárquico automatizado con Graphviz.")
+        
+        # Usamos columnas para centrar el botón y darle mejor aspecto
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
+            if st.button("Generar Mapa Conceptual 🗺️", type="primary"):
+                with st.spinner("Diseñando diagrama y relaciones de temas..."):
+                    dot_code = generate_concept_map_dot(st.session_state.notes_content)
+                    if dot_code:
+                        st.session_state["concept_map_dot"] = dot_code
 
-        if st.button("Generar Mapa Conceptual 🗺️", type="primary"):
-            with st.spinner("Diseñando diagrama de flujo y relaciones de temas..."):
-                dot_code = generate_concept_map_dot(st.session_state.notes_content)
-                if dot_code:
-                    st.session_state["concept_map_dot"] = dot_code
-
+        # Renderizar el mapa conceptual si existe el código DOT
         if "concept_map_dot" in st.session_state:
             try:
-                st.graphviz_chart(st.session_state["concept_map_dot"])
-            except Exception as e:
-                st.error("No se pudo estructurar el diagrama automáticamente. Inténtalo de nuevo.")
+                #st.info("🗺️ Haz clic derecho y selecciona 'Guardar imagen como...' para descargar el esquema.")
+                st.graphviz_chart(st.session_state["concept_map_dot"], use_container_width=True)
+            except Exception:
+                st.error("⚠️ No se pudo estructurar el diagrama automáticamente con Graphviz.")
+                # Limpiar el estado para evitar errores persistentes
+                del st.session_state["concept_map_dot"]
 
 else:
     st.info("💡 Por favor, sube un archivo o escribe tus notas arriba para empezar.")
