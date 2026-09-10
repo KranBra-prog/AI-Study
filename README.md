@@ -1,4 +1,4 @@
-# 🤖 AI Study Buddy
+# 🤖 AI Study 
 
 **AI Study Buddy** es una aplicación interactiva construida con Python, Streamlit y la API de OpenAI. Permite a los estudiantes subir sus apuntes en formato PDF o texto y transformarlos automáticamente en resúmenes, cuestionarios (quizzes) y fichas de estudio (flashcards).
 
