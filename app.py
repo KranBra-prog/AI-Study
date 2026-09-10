@@ -95,7 +95,7 @@ def generate_interactive_quiz(notes_text, num_questions=5):
 
 # --- INTERFAZ PRINCIPAL ---
 
-st.title("🤖 AI Study BGA (Powered by Gemini)")
+st.title("🤖 AI Study BGA")
 st.caption("Sube tus apuntes y pon a prueba tus conocimientos de forma interactiva.")
 
 if not api_key:
