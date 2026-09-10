@@ -258,7 +258,7 @@ def render_flip_card(front_text, back_text, card_id):
 
 # --- INTERFAZ PRINCIPAL ---
 
-st.title("🤖 AI Study Buddy (Powered by Gemini)")
+st.title("🤖 AI Study Buddy")
 st.caption("Sube tus apuntes y conviértelos en resúmenes, quizzes, tarjetas e infografías.")
 
 if not api_key:
