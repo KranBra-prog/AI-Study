@@ -7,17 +7,18 @@ from google import genai
 # Cargar variables de entorno local
 load_dotenv()
 
-# Obtener la API Key de Gemini desde Secrets o .env
+# Obtener la API Key de Gemini desde Secrets (Streamlit Cloud) o .env (Local)
 api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
 
-# Inicializar cliente de Gemini
+# Inicializar cliente de Gemini si la clave está disponible
 client = genai.Client(api_key=api_key) if api_key else None
 
-st.set_page_config(page_title="AI Study Buddy", page_icon="🤖", layout="centered")
+st.set_page_config(page_title="AI Study BGA", page_icon="🤖", layout="centered")
 
 # --- FUNCIONES AUXILIARES ---
 
 def extract_text_from_pdf(pdf_file):
+    """Extrae texto de un archivo PDF subido."""
     reader = PyPDF2.PdfReader(pdf_file)
     text = ""
     for page in reader.pages:
@@ -27,10 +28,10 @@ def extract_text_from_pdf(pdf_file):
     return text
 
 def safe_gemini_call(prompt):
-    """Realiza la consulta al modelo gemini-1.5-flash."""
+    """Realiza la consulta al modelo de Gemini de forma segura."""
     try:
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-2.5-flash',
             contents=prompt,
         )
         return response.text
@@ -51,7 +52,7 @@ def generate_flashcards(notes_text, num_cards=5):
 
 # --- INTERFAZ DE USUARIO ---
 
-st.title("🤖 AI Study Buddy (Powered by Gemini)")
+st.title("🤖 AI Study BGA")
 st.caption("Sube tus apuntes y conviértelos en resúmenes, quizzes y tarjetas de estudio.")
 
 if not api_key:
