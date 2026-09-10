@@ -2,14 +2,16 @@ import os
 import streamlit as st
 import PyPDF2
 from dotenv import load_dotenv
-from openai import OpenAI, RateLimitError, APIError
+from google import genai
 
-# Cargar variables de entorno
+# Cargar variables de entorno local
 load_dotenv()
 
-# Configuración de la API Key (prioriza Secrets de Streamlit Cloud, luego .env)
-api_key = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=api_key) if api_key else None
+# Obtener la API Key de Gemini desde Secrets o .env
+api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+
+# Inicializar cliente de Gemini
+client = genai.Client(api_key=api_key) if api_key else None
 
 st.set_page_config(page_title="AI Study Buddy", page_icon="🤖", layout="centered")
 
@@ -24,41 +26,36 @@ def extract_text_from_pdf(pdf_file):
             text += extracted + "\n"
     return text
 
-def safe_api_call(prompt, temperature=0.7):
-    """Realiza la llamada a OpenAI manejando posibles errores de límites o saldo."""
+def safe_gemini_call(prompt):
+    """Realiza la consulta al modelo gemini-1.5-flash."""
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",  # Modelo económico y rápido
-            messages=[{"role": "user", "content": prompt}],
-            temperature=temperature
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=prompt,
         )
-        return response.choices[0].message.content
-    except RateLimitError:
-        return "⚠️ **Error de cuota/saldo:** Tu cuenta de OpenAI no tiene saldo suficiente o superó el límite de peticiones. Verifica tu facturación en [platform.openai.com/settings/billing](https://platform.openai.com/settings/billing)."
-    except APIError as e:
-        return f"⚠️ **Error de OpenAI:** {e.message}"
+        return response.text
     except Exception as e:
-        return f"⚠️ **Error inesperado:** {str(e)}"
+        return f"⚠️ **Error al generar respuesta:** {str(e)}"
 
 def generate_summary(notes_text):
-    prompt = f"You are a helpful teacher. Based on the following study notes, provide a concise, well-structured summary highlighting key concepts:\n\nNotes:\n{notes_text}"
-    return safe_api_call(prompt, temperature=0.5)
+    prompt = f"Eres un profesor experto. A partir de los siguientes apuntes, genera un resumen conciso y bien estructurado destacando los conceptos clave:\n\nApuntes:\n{notes_text}"
+    return safe_gemini_call(prompt)
 
 def generate_quiz(notes_text, num_questions=5):
-    prompt = f"You are a helpful teacher. Create {num_questions} multiple-choice questions with 4 options each (A, B, C, D) based on these notes. Return the questions in a clear, structured format indicating the correct answer:\n\nNotes:\n{notes_text}"
-    return safe_api_call(prompt, temperature=0.7)
+    prompt = f"Eres un profesor experto. Crea un cuestionario de {num_questions} preguntas de opción múltiple con 4 opciones cada una (A, B, C, D) basadas en estos apuntes. Indica al final la respuesta correcta para cada una:\n\nApuntes:\n{notes_text}"
+    return safe_gemini_call(prompt)
 
 def generate_flashcards(notes_text, num_cards=5):
-    prompt = f"You are a helpful study assistant. Create {num_cards} key flashcards based on these notes. Format each as:\n**Front (Concept/Question):** ...\n**Back (Answer/Explanation):** ...\n\nNotes:\n{notes_text}"
-    return safe_api_call(prompt, temperature=0.6)
+    prompt = f"Crea {num_cards} fichas de estudio (flashcards) basadas en estos apuntes. Formatea cada una como:\n**Frente (Concepto/Pregunta):** ...\n**Reverso (Respuesta/Explicación):** ...\n\nApuntes:\n{notes_text}"
+    return safe_gemini_call(prompt)
 
-# --- INTERFAZ ---
+# --- INTERFAZ DE USUARIO ---
 
-st.title("🤖 AI Study Buddy")
-st.caption("Upload your notes and turn them into flashcards, quiz questions, and summaries.")
+st.title("🤖 AI Study Buddy (Powered by Gemini)")
+st.caption("Sube tus apuntes y conviértelos en resúmenes, quizzes y tarjetas de estudio.")
 
 if not api_key:
-    st.error("⚠️ No se encontró la API Key de OpenAI. Configúrala en Secrets (Streamlit Cloud) o en tu archivo .env.")
+    st.error("⚠️ No se encontró la GEMINI_API_KEY. Configúrala en Secrets (Streamlit Cloud) o en tu archivo .env.")
     st.stop()
 
 uploaded_file = st.file_uploader("Sube tus apuntes (PDF o TXT)", type=["pdf", "txt"])
