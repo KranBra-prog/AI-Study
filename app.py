@@ -1,11 +1,14 @@
 import os
 import json
 import time
+from io import BytesIO
+from PIL import Image
 import streamlit as st
 import streamlit.components.v1 as components
 import PyPDF2
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types
 
 # Cargar variables de entorno
 load_dotenv()
@@ -117,16 +120,14 @@ def generate_flashcards_json(notes_text, num_cards=5):
         return None
 
 def generate_concept_map_dot(notes_text):
-    """Genera código DOT (Graphviz) estructurado para dibujar el mapa conceptual."""
     prompt = f"""
     Eres un diseñador de mapas conceptuales e infografías educativas.
     Analiza el texto facilitado y genera un código Graphviz en formato DOT válido.
 
-    Instrucciones de formato:
+    Instrucciones:
     - Usa 'digraph G {{ ... }}'.
-    - Agrega estilo a los nodos: `node [shape=box, style="filled,rounded", color="#2b2d42", fontcolor=white, fontname="Helvetica"];`
-    - Diseña relaciones conceptuales claras (Ejemplo: "Concepto A" -> "Concepto B" [label="relación"]).
-    - Mantén las etiquetas breves y precisas.
+    - Estilo de nodos: `node [shape=box, style="filled,rounded", color="#2b2d42", fontcolor=white, fontname="Helvetica"];`
+    - Diseña relaciones conceptuales claras.
     - DEVUELVE ÚNICAMENTE EL CÓDIGO DOT SIN BLOQUES MARKDOWN NI TEXTO ADICIONAL.
 
     Apuntes:
@@ -141,6 +142,34 @@ def generate_concept_map_dot(notes_text):
     if cleaned.endswith("```"):
         cleaned = cleaned[:-3]
     return cleaned.strip()
+
+def generate_infographic_prompt(notes_text):
+    """Crea un prompt en inglés optimizado para generar la infografía visual."""
+    prompt = f"""
+    You are an expert graphic designer. Based on these study notes, create a detailed, highly descriptive prompt IN ENGLISH to generate a clean, educational visual infographic poster.
+    Focus on key visual elements, icons, layout, and modern flat design style. Keep it under 100 words.
+
+    Notes:
+    {notes_text}
+    """
+    return safe_gemini_call(prompt)
+
+def generate_infographic_image(prompt_text):
+    """Llama al modelo Imagen 3 para generar la imagen de la infografía."""
+    try:
+        response = client.models.generate_images(
+            model='imagen-3.0-generate-002',
+            prompt=prompt_text,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio="3:4"
+            )
+        )
+        for generated_image in response.generated_images:
+            return Image.open(BytesIO(generated_image.image.image_bytes))
+    except Exception as e:
+        st.error(f"⚠️ Error al generar la imagen con Imagen 3: {e}")
+        return None
 
 def render_flip_card(front_text, back_text, card_id):
     card_html = f"""
@@ -230,7 +259,7 @@ def render_flip_card(front_text, back_text, card_id):
 # --- INTERFAZ PRINCIPAL ---
 
 st.title("🤖 AI Study Buddy (Powered by Gemini)")
-st.caption("Sube tus apuntes y conviértelos en resúmenes, quizzes, tarjetas y mapas conceptuales.")
+st.caption("Sube tus apuntes y conviértelos en resúmenes, quizzes, tarjetas e infografías.")
 
 if not api_key:
     st.error("⚠️ No se encontró la GEMINI_API_KEY. Configúrala en Secrets (Streamlit Cloud) o en tu archivo .env.")
@@ -256,7 +285,7 @@ if submit_text or uploaded_file is not None:
 # --- PESTAÑAS ---
 if st.session_state.notes_content:
     st.success("✅ Apuntes cargados correctamente.")
-    tab1, tab2, tab3, tab4 = st.tabs(["📌 Resumen", "❓ Quiz Interactivo", "🎴 Flashcards", "🗺️ Mapa Conceptual"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📌 Resumen", "❓ Quiz Interactivo", "🎴 Flashcards", "🎨 Infografía y Esquemas"])
 
     # 1. RESUMEN
     with tab1:
@@ -369,7 +398,7 @@ if st.session_state.notes_content:
             for idx, card in enumerate(st.session_state["flashcards_data"]):
                 render_flip_card(card["front"], card["back"], card_id=idx)
 
-    # 4. INFOGRAFÍA Y ESQUEMAS (Solo Mapa Conceptual)
+   # 4. INFOGRAFÍA Y ESQUEMAS (Solo Mapa Conceptual)
     with tab4:
         st.subheader("🗺️ Esquema Conceptual de Apuntes")
         
