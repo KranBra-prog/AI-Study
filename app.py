@@ -31,7 +31,7 @@ def safe_gemini_call(prompt):
     """Realiza la consulta al modelo de Gemini de forma segura."""
     try:
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.6-flash',  # Modelo actualizado
             contents=prompt,
         )
         return response.text
