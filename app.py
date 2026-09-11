@@ -29,7 +29,6 @@ st.set_page_config(
 # --- INYECCIÓN DE CSS RESPONSIVO PARA DISPOSITIVOS MÓVILES ---
 st.markdown("""
     <style>
-    /* Ajustes generales para pantallas pequeñas */
     @media (max-width: 768px) {
         .main .block-container {
             padding-left: 0.8rem !important;
@@ -45,14 +44,12 @@ st.markdown("""
             font-size: 1.4rem !important;
         }
         
-        /* Ajustar los botones para toque táctil fácil */
         .stButton button {
             width: 100% !important;
             min-height: 48px !important;
             font-size: 16px !important;
         }
         
-        /* Ajustar pestañas superiores en móviles */
         .stTabs [data-baseweb="tab-list"] {
             gap: 2px !important;
         }
@@ -62,7 +59,6 @@ st.markdown("""
         }
     }
     
-    /* Contenedores táctiles */
     div[data-testid="stForm"] {
         padding: 12px !important;
     }
@@ -101,38 +97,29 @@ def extract_text_from_pdf(pdf_file):
     return text
 
 def safe_gemini_call(prompt):
-    """Realiza la llamada a Gemini con reintentos y modelo de respaldo si la API se satura (503)."""
+    """Maneja reintentos y respaldos automáticos si Gemini está sobrecargado (503)."""
     models_to_try = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-1.5-flash']
     
     for model_name in models_to_try:
-        for attempt in range(3):  # 3 reintentos por modelo
+        for attempt in range(3):
             try:
                 response = client.models.generate_content(
                     model=model_name,
                     contents=prompt,
                 )
-                if response.text:
+                if response and response.text:
                     return response.text
             except Exception as e:
                 error_str = str(e)
-                # Si es un error de sobrecarga (503), esperar y reintentar
                 if "503" in error_str or "UNAVAILABLE" in error_str:
                     time.sleep(1.5 * (attempt + 1))
                 else:
-                    break  # Si es otro tipo de error, intentar con el siguiente modelo
+                    break
                     
-    return "⚠️ **El servicio está experimentando alta demanda.** Por favor, intenta enviar tu pregunta de nuevo en unos segundos."
+    return "⚠️ **El servicio está experimentando alta demanda.** Por favor, intenta de nuevo en unos momentos."
 
 def text_to_speech_bytes(text, voice="es-ES-AlvaroNeural", rate="+50%"):
-    """
-    Genera audio con voz masculina natural y velocidad 1.5x usando edge-tts.
-    Opciones de voz masculina:
-      - 'es-ES-AlvaroNeural' (España)
-      - 'es-MX-JorgeNeural' (México)
-      - 'es-AR-TomasNeural' (Argentina)
-    """
     try:
-        # Limpiar caracteres markdown antes de sintetizar la voz
         clean_text = text.replace("*", "").replace("#", "").replace("`", "")
         
         async def _generate_audio():
@@ -144,14 +131,12 @@ def text_to_speech_bytes(text, voice="es-ES-AlvaroNeural", rate="+50%"):
             fp.seek(0)
             return fp
 
-        # Ejecutar la corrutina asíncrona dentro de Streamlit
         return asyncio.run(_generate_audio())
     except Exception as e:
         st.error(f"Error en voz: {e}")
         return None
 
 def transcribe_audio_bytes(audio_bytes):
-    """Transcribe audio ingresado por voz usando Gemini (multimodal)."""
     try:
         response = client.models.generate_content(
             model='gemini-3.6-flash',
@@ -386,8 +371,8 @@ if st.session_state.notes_content:
         "📌 Resumen", 
         "❓ Quiz", 
         "🎴 Flashcards", 
-        "🗺️ Mapa Conceptual",
-        "💬 Chat con Buddy"
+        "🗺️ Mapa",
+        "💬 Chat"
     ])
 
     # 1. RESUMEN
@@ -533,7 +518,7 @@ if st.session_state.notes_content:
     # 5. CHAT CON BUDDY
     with tab5:
         st.subheader("💬 Consulta a tu Tutor Buddy")
-        st.session_state.voice_enabled = st.checkbox("🔊 Activar respuesta por voz", value=st.session_state.voice_enabled)
+        st.session_state.voice_enabled = st.checkbox("🔊 Activar respuesta por voz (Masculina 1.5x)", value=st.session_state.voice_enabled)
 
         if not st.session_state.chat_messages:
             st.session_state.chat_messages = [
@@ -547,7 +532,6 @@ if st.session_state.notes_content:
                 with st.chat_message(msg["role"]):
                     st.markdown(msg["content"])
                     if msg["role"] == "assistant" and "audio" in msg and msg["audio"]:
-                        # Reproduce automáticamente solo el último mensaje de respuesta
                         is_last = (idx == len(st.session_state.chat_messages) - 1)
                         st.audio(msg["audio"], format="audio/mp3", autoplay=is_last)
 
@@ -565,7 +549,7 @@ if st.session_state.notes_content:
 
         final_prompt = voice_prompt or user_prompt
 
-       if final_prompt:
+        if final_prompt:
             st.session_state.chat_messages.append({"role": "user", "content": final_prompt})
 
             system_context = f"""
@@ -581,10 +565,9 @@ if st.session_state.notes_content:
             
             response_text = safe_gemini_call(system_context)
             
-            # Solo generar audio si NO es un mensaje de error
             audio_fp = None
             if st.session_state.voice_enabled and not response_text.startswith("⚠️"):
-                audio_fp = text_to_speech_bytes(response_text, voice="es-ES-AlvaroNeural", rate="+0%")
+                audio_fp = text_to_speech_bytes(response_text, voice="es-ES-AlvaroNeural", rate="+50%")
 
             st.session_state.chat_messages.append({
                 "role": "assistant", 
