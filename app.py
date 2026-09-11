@@ -2,13 +2,11 @@ import os
 import json
 import time
 from io import BytesIO
-from PIL import Image
 import streamlit as st
 import streamlit.components.v1 as components
 import PyPDF2
 from dotenv import load_dotenv
 from google import genai
-from google.genai import types
 
 # Cargar variables de entorno
 load_dotenv()
@@ -32,6 +30,8 @@ if "start_time" not in st.session_state:
     st.session_state.start_time = None
 if "time_limit" not in st.session_state:
     st.session_state.time_limit = 60
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = []
 
 # --- FUNCIONES AUXILIARES ---
 
@@ -47,7 +47,7 @@ def extract_text_from_pdf(pdf_file):
 def safe_gemini_call(prompt):
     try:
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model='gemini-2.5-flash',
             contents=prompt,
         )
         return response.text
@@ -143,34 +143,6 @@ def generate_concept_map_dot(notes_text):
         cleaned = cleaned[:-3]
     return cleaned.strip()
 
-def generate_infographic_prompt(notes_text):
-    """Crea un prompt en inglés optimizado para generar la infografía visual."""
-    prompt = f"""
-    You are an expert graphic designer. Based on these study notes, create a detailed, highly descriptive prompt IN ENGLISH to generate a clean, educational visual infographic poster.
-    Focus on key visual elements, icons, layout, and modern flat design style. Keep it under 100 words.
-
-    Notes:
-    {notes_text}
-    """
-    return safe_gemini_call(prompt)
-
-def generate_infographic_image(prompt_text):
-    """Llama al modelo Imagen 3 para generar la imagen de la infografía."""
-    try:
-        response = client.models.generate_images(
-            model='imagen-3.0-generate-002',
-            prompt=prompt_text,
-            config=types.GenerateImagesConfig(
-                number_of_images=1,
-                aspect_ratio="3:4"
-            )
-        )
-        for generated_image in response.generated_images:
-            return Image.open(BytesIO(generated_image.image.image_bytes))
-    except Exception as e:
-        st.error(f"⚠️ Error al generar la imagen con Imagen 3: {e}")
-        return None
-
 def render_flip_card(front_text, back_text, card_id):
     card_html = f"""
     <!DOCTYPE html>
@@ -259,7 +231,7 @@ def render_flip_card(front_text, back_text, card_id):
 # --- INTERFAZ PRINCIPAL ---
 
 st.title("🤖 AI Study Buddy")
-st.caption("Sube tus apuntes y conviértelos en resúmenes, quizzes, tarjetas e infografías.")
+st.caption("Sube tus apuntes y conviértelos en resúmenes, quizzes, tarjetas, mapas y chatea con tu tutor IA.")
 
 if not api_key:
     st.error("⚠️ No se encontró la GEMINI_API_KEY. Configúrala en Secrets (Streamlit Cloud) o en tu archivo .env.")
@@ -274,6 +246,7 @@ with st.form("notes_form", clear_on_submit=False):
     submit_text = st.form_submit_button("Procesar Texto ↵")
 
 if submit_text or uploaded_file is not None:
+    previous_content = st.session_state.notes_content
     if uploaded_file is not None:
         if uploaded_file.type == "application/pdf":
             st.session_state.notes_content = extract_text_from_pdf(uploaded_file)
@@ -282,10 +255,22 @@ if submit_text or uploaded_file is not None:
     elif text_input.strip():
         st.session_state.notes_content = text_input.strip()
 
+    # Si se cargaron nuevos apuntes, reiniciamos la conversación del chat
+    if previous_content != st.session_state.notes_content:
+        st.session_state.chat_messages = [
+            {"role": "assistant", "content": "¡Hola! 👋 Soy **Buddy**, tu tutor personal de estudio. Ya he leído tus apuntes. ¿Qué te gustaría consultar o repasar hoy?"}
+        ]
+
 # --- PESTAÑAS ---
 if st.session_state.notes_content:
     st.success("✅ Apuntes cargados correctamente.")
-    tab1, tab2, tab3, tab4 = st.tabs(["📌 Resumen", "❓ Quiz Interactivo", "🎴 Flashcards", "🎨 Infografía y Esquemas"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📌 Resumen", 
+        "❓ Quiz Interactivo", 
+        "🎴 Flashcards", 
+        "🗺️ Mapa Conceptual",
+        "💬 Chat con Buddy"
+    ])
 
     # 1. RESUMEN
     with tab1:
@@ -296,7 +281,7 @@ if st.session_state.notes_content:
 
     # 2. QUIZ INTERACTIVO
     with tab2:
-        st.subheader(" Cuestionario Interactivo")
+        st.subheader("Cuestionario Interactivo")
         col_q, col_t = st.columns(2)
         with col_q:
             num_q = st.slider("Número de preguntas:", min_value=1, max_value=10, value=5)
@@ -398,31 +383,65 @@ if st.session_state.notes_content:
             for idx, card in enumerate(st.session_state["flashcards_data"]):
                 render_flip_card(card["front"], card["back"], card_id=idx)
 
-   # 4. INFOGRAFÍA Y ESQUEMAS (Solo Mapa Conceptual)
+    # 4. MAPA CONCEPTUAL
     with tab4:
         st.subheader("🗺️ Esquema Conceptual de Apuntes")
-        
-        # Eliminamos las sub-pestañas y mostramos el mapa conceptual directamente
         st.caption("Diagrama jerárquico automatizado con Graphviz.")
-        
-        # Usamos columnas para centrar el botón y darle mejor aspecto
-        col1, col2, col3 = st.columns([1,2,1])
-        with col2:
-            if st.button("Generar Mapa Conceptual 🗺️", type="primary"):
-                with st.spinner("Diseñando diagrama y relaciones de temas..."):
-                    dot_code = generate_concept_map_dot(st.session_state.notes_content)
-                    if dot_code:
-                        st.session_state["concept_map_dot"] = dot_code
 
-        # Renderizar el mapa conceptual si existe el código DOT
+        if st.button("Generar Mapa Conceptual 🗺️", type="primary"):
+            with st.spinner("Diseñando diagrama..."):
+                dot_code = generate_concept_map_dot(st.session_state.notes_content)
+                if dot_code:
+                    st.session_state["concept_map_dot"] = dot_code
+
         if "concept_map_dot" in st.session_state:
             try:
-                #st.info("🗺️ Haz clic derecho y selecciona 'Guardar imagen como...' para descargar el esquema.")
                 st.graphviz_chart(st.session_state["concept_map_dot"], use_container_width=True)
             except Exception:
-                st.error("⚠️ No se pudo estructurar el diagrama automáticamente con Graphviz.")
-                # Limpiar el estado para evitar errores persistentes
+                st.error("⚠️ No se pudo estructurar el diagrama con Graphviz.")
                 del st.session_state["concept_map_dot"]
+
+    # 5. CHAT CON BUDDY
+    with tab5:
+        st.subheader("💬 Consulta a tu Tutor Buddy")
+        st.caption("Hazle preguntas directas a Buddy sobre el contenido de tus apuntes cargados.")
+
+        if not st.session_state.chat_messages:
+            st.session_state.chat_messages = [
+                {"role": "assistant", "content": "¡Hola! 👋 Soy **Buddy**, tu tutor personal. Pregúntame lo que quieras sobre tus apuntes subidos."}
+            ]
+
+        # Mostrar historial de mensajes
+        for msg in st.session_state.chat_messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+        # Entrada del usuario
+        if user_prompt := st.chat_input("Escribe tu pregunta sobre los apuntes..."):
+            # Guardar y mostrar mensaje del usuario
+            st.session_state.chat_messages.append({"role": "user", "content": user_prompt})
+            with st.chat_message("user"):
+                st.markdown(user_prompt)
+
+            # Generar respuesta de Buddy
+            with st.chat_message("assistant"):
+                with st.spinner("Buddy está pensando..."):
+                    system_context = f"""
+                    Eres Buddy, un tutor de estudio amigable, claro y didáctico.
+                    Tu objetivo es responder a las preguntas del estudiante BASÁNDOTE EXCLUSIVAMENTE en el contenido de sus apuntes subidos.
+                    Si la respuesta a la pregunta no está en los apuntes, indícalo amablemente.
+
+                    APUNTES DEL ESTUDIANTE:
+                    {st.session_state.notes_content}
+
+                    PREGUNTA DEL ESTUDIANTE:
+                    {user_prompt}
+                    """
+                    response_text = safe_gemini_call(system_context)
+                    st.markdown(response_text)
+
+            # Guardar respuesta en el historial
+            st.session_state.chat_messages.append({"role": "assistant", "content": response_text})
 
 else:
     st.info("💡 Por favor, sube un archivo o escribe tus notas arriba para empezar.")
