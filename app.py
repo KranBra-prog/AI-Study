@@ -520,7 +520,7 @@ if st.session_state.notes_content:
     # 5. CHAT CON BUDDY
     with tab5:
         st.subheader("💬 Consulta a tu Tutor Buddy")
-        st.session_state.voice_enabled = st.checkbox("🔊 Activar respuesta por voz (Masculina 1.5x)", value=st.session_state.voice_enabled)
+        st.session_state.voice_enabled = st.checkbox("🔊 Activar respuesta por voz", value=st.session_state.voice_enabled)
 
         if not st.session_state.chat_messages:
             st.session_state.chat_messages = [
@@ -570,8 +570,8 @@ if st.session_state.notes_content:
             
             audio_fp = None
             if st.session_state.voice_enabled:
-                # Genera la voz masculina (Tomas) a velocidad +50% (1.5x)
-                audio_fp = text_to_speech_bytes(response_text, voice="es-AR-TomasNeural", rate="+50%")
+                # Genera la voz masculina (Tomas) 
+                audio_fp = text_to_speech_bytes(response_text, voice="es-AR-TomasNeural", rate="+0%")
 
             st.session_state.chat_messages.append({
                 "role": "assistant", 
