@@ -61,15 +61,14 @@ st.markdown("""
         position: relative !important;
     }
 
-    /* Posicionar el micrófono DENTRO de la barra de chat centrada */
-    div[data-testid="stChatInput"] iframe[title="audio_recorder_streamlit.audio_recorder"],
+   /* Posicionar el micrófono DENTRO de la barra de chat centrada */
     iframe[title="audio_recorder_streamlit.audio_recorder"] {
         position: absolute !important;
-        bottom: 8px !important;
-        right: 55px !important;
+        bottom: 15px !important; /* Subido de 8px a 15px */
+        right: 48px !important;  /* Movido más a la derecha, de 55px a 48px */
         z-index: 999999 !important;
-        width: 38px !important;
-        height: 38px !important;
+        width: 35px !important;
+        height: 35px !important;
         border: none !important;
         background: transparent !important;
     }
