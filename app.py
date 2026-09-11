@@ -18,7 +18,7 @@ load_dotenv()
 api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key) if api_key else None
 
-# --- CONFIGURACIÓN DE PÁGINA RESPONSIVA ---
+# --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
     page_title="AI Study Buddy",
     page_icon="🤖",
@@ -26,7 +26,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- INYECCIÓN DE CSS RESPONSIVO PARA DISPOSITIVOS MÓVILES ---
+# --- INYECCIÓN DE CSS (RESPONSIVO + MICRÓFONO INTEGRADO ESTILO GEMINI) ---
 st.markdown("""
     <style>
     @media (max-width: 768px) {
@@ -36,13 +36,8 @@ st.markdown("""
             padding-top: 1rem !important;
         }
         
-        h1 {
-            font-size: 1.8rem !important;
-        }
-        
-        h2 {
-            font-size: 1.4rem !important;
-        }
+        h1 { font-size: 1.8rem !important; }
+        h2 { font-size: 1.4rem !important; }
         
         .stButton button {
             width: 100% !important;
@@ -50,9 +45,7 @@ st.markdown("""
             font-size: 16px !important;
         }
         
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 2px !important;
-        }
+        .stTabs [data-baseweb="tab-list"] { gap: 2px !important; }
         .stTabs [data-baseweb="tab"] {
             padding: 8px 10px !important;
             font-size: 13px !important;
@@ -63,24 +56,25 @@ st.markdown("""
         padding: 12px !important;
     }
 
-    /* Posicionar el grabador de audio dentro de la barra de chat_input */
-div[data-testid="stChatInput"] {
-    position: relative !important;
-}
+    /* POSICIONAMIENTO DEL MICRÓFONO DENTRO DE LA BARRA DE CHAT */
+    div[data-testid="stChatInput"] {
+        position: relative !important;
+    }
 
-/* Mueve el contenedor del micrófono al extremo derecho del input */
-div:has(> iframe[title="audio_recorder_streamlit.audio_recorder"]) {
-    position: fixed !important;
-    bottom: 28px !important;
-    right: 75px !important;
-    z-index: 999999 !important;
-    background: transparent !important;
-}
+    iframe[title="audio_recorder_streamlit.audio_recorder"] {
+        position: fixed !important;
+        bottom: 22px !important;
+        right: 80px !important;
+        z-index: 999999 !important;
+        width: 45px !important;
+        height: 45px !important;
+        border: none !important;
+        background: transparent !important;
+    }
 
-/* Espaciado interno en el campo de texto para que las letras no pisen el ícono */
-div[data-testid="stChatInput"] textarea {
-    padding-right: 90px !important;
-}
+    div[data-testid="stChatInput"] textarea {
+        padding-right: 95px !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -152,7 +146,6 @@ def text_to_speech_bytes(text, voice="es-ES-AlvaroNeural", rate="+50%"):
 
         return asyncio.run(_generate_audio())
     except Exception as e:
-        st.error(f"Error en voz: {e}")
         return None
 
 def transcribe_audio_bytes(audio_bytes):
@@ -166,7 +159,7 @@ def transcribe_audio_bytes(audio_bytes):
         )
         return response.text.strip()
     except Exception as e:
-        return f"Error en transcripción: {str(e)}"
+        return None
 
 def generate_summary(notes_text):
     prompt = f"Eres un profesor experto. Genera un resumen conciso, claro y bien estructurado de estos apuntes utilizando títulos y viñetas:\n\n{notes_text}"
@@ -534,7 +527,7 @@ if st.session_state.notes_content:
                 st.error("⚠️ No se pudo generar el esquema.")
                 del st.session_state["concept_map_dot"]
 
-   # 5. CHAT CON BUDDY
+    # 5. CHAT CON BUDDY
     with tab5:
         st.subheader("💬 Consulta a tu Tutor Buddy")
         st.session_state.voice_enabled = st.checkbox("🔊 Activar respuesta por voz (Masculina 1.5x)", value=st.session_state.voice_enabled)
@@ -554,11 +547,11 @@ if st.session_state.notes_content:
                         is_last = (idx == len(st.session_state.chat_messages) - 1)
                         st.audio(msg["audio"], format="audio/mp3", autoplay=is_last)
 
-        # 🎤 Micrófono flotante estilizado como Gemini
+        # 🎤 Grabador de voz (Se posiciona flotante sobre el chat input con CSS)
         audio_bytes = audio_recorder(
             text="", 
             recording_color="#ea4335", 
-            neutral_color="#444746", 
+            neutral_color="#5f6368", 
             icon_name="microphone", 
             icon_size="1x"
         )
