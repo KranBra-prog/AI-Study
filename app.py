@@ -56,24 +56,27 @@ st.markdown("""
         padding: 12px !important;
     }
 
-    /* POSICIONAMIENTO DEL MICRÓFONO DENTRO DE LA BARRA DE CHAT */
+    /* Ajuste para que el contenedor del chat soporte elementos absolutos dentro de su área */
     div[data-testid="stChatInput"] {
         position: relative !important;
     }
 
+    /* Posicionar el micrófono DENTRO de la barra de chat centrada */
+    div[data-testid="stChatInput"] iframe[title="audio_recorder_streamlit.audio_recorder"],
     iframe[title="audio_recorder_streamlit.audio_recorder"] {
-        position: fixed !important;
-        bottom: 22px !important;
-        right: 80px !important;
+        position: absolute !important;
+        bottom: 8px !important;
+        right: 55px !important;
         z-index: 999999 !important;
-        width: 45px !important;
-        height: 45px !important;
+        width: 38px !important;
+        height: 38px !important;
         border: none !important;
         background: transparent !important;
     }
 
+    /* Margen a la derecha del texto para que no tape los botones */
     div[data-testid="stChatInput"] textarea {
-        padding-right: 95px !important;
+        padding-right: 90px !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -547,7 +550,10 @@ if st.session_state.notes_content:
                         is_last = (idx == len(st.session_state.chat_messages) - 1)
                         st.audio(msg["audio"], format="audio/mp3", autoplay=is_last)
 
-        # 🎤 Grabador de voz (Se posiciona flotante sobre el chat input con CSS)
+       # Contenedor de entrada de texto + micrófono
+        user_prompt = st.chat_input("Escribe tu pregunta...")
+        
+        # Grabador de voz posicionado absolutamente sobre la barra
         audio_bytes = audio_recorder(
             text="", 
             recording_color="#ea4335", 
@@ -560,8 +566,6 @@ if st.session_state.notes_content:
         if audio_bytes:
             with st.spinner("Transcribiendo voz..."):
                 voice_prompt = transcribe_audio_bytes(audio_bytes)
-
-        user_prompt = st.chat_input("Escribe tu pregunta...")
 
         final_prompt = voice_prompt or user_prompt
 
