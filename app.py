@@ -61,14 +61,14 @@ st.markdown("""
         position: relative !important;
     }
 
-   /* Posicionar el micrófono DENTRO de la barra de chat centrada */
+ /* Posicionar el micrófono a la izquierda del botón enter sin taparlo */
     iframe[title="audio_recorder_streamlit.audio_recorder"] {
         position: absolute !important;
-        bottom: 20px !important; /* Subido de 8px a 15px */
-        right: 40px !important;  /* Movido más a la derecha, de 55px a 48px */
+        bottom: 12px !important;
+        right: 62px !important;  /* Aumentado a 62px para dejar libre la flecha */
         z-index: 999999 !important;
-        width: 35px !important;
-        height: 35px !important;
+        width: 32px !important;
+        height: 32px !important;
         border: none !important;
         background: transparent !important;
     }
