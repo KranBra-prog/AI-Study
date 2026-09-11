@@ -1,13 +1,14 @@
 import os
 import json
 import time
+import asyncio
 from io import BytesIO
 import streamlit as st
 import streamlit.components.v1 as components
 import PyPDF2
 from dotenv import load_dotenv
 from google import genai
-from gtts import gTTS
+import edge_tts
 from audio_recorder_streamlit import audio_recorder
 
 # Cargar variables de entorno
@@ -109,18 +110,35 @@ def safe_gemini_call(prompt):
     except Exception as e:
         return f"⚠️ **Error al generar respuesta:** {str(e)}"
 
-def text_to_speech_bytes(text):
+def text_to_speech_bytes(text, voice="es-ES-AlvaroNeural", rate="+50%"):
+    """
+    Genera audio con voz masculina natural y velocidad 1.5x usando edge-tts.
+    Opciones de voz masculina:
+      - 'es-ES-AlvaroNeural' (España)
+      - 'es-MX-JorgeNeural' (México)
+      - 'es-AR-TomasNeural' (Argentina)
+    """
     try:
+        # Limpiar caracteres markdown antes de sintetizar la voz
         clean_text = text.replace("*", "").replace("#", "").replace("`", "")
-        tts = gTTS(text=clean_text, lang='es', tld='com')
-        fp = BytesIO()
-        tts.write_to_fp(fp)
-        fp.seek(0)
-        return fp
-    except Exception:
+        
+        async def _generate_audio():
+            communicate = edge_tts.Communicate(clean_text, voice=voice, rate=rate)
+            fp = BytesIO()
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    fp.write(chunk["data"])
+            fp.seek(0)
+            return fp
+
+        # Ejecutar la corrutina asíncrona dentro de Streamlit
+        return asyncio.run(_generate_audio())
+    except Exception as e:
+        st.error(f"Error en voz: {e}")
         return None
 
 def transcribe_audio_bytes(audio_bytes):
+    """Transcribe audio ingresado por voz usando Gemini (multimodal)."""
     try:
         response = client.models.generate_content(
             model='gemini-3.6-flash',
@@ -223,7 +241,6 @@ def generate_concept_map_dot(notes_text):
     return cleaned.strip()
 
 def render_flip_card(front_text, back_text, card_id):
-    # HTML/CSS de Flashcards adaptable a pantallas pequeñas
     card_html = f"""
     <!DOCTYPE html>
     <html>
@@ -503,22 +520,23 @@ if st.session_state.notes_content:
     # 5. CHAT CON BUDDY
     with tab5:
         st.subheader("💬 Consulta a tu Tutor Buddy")
-        st.session_state.voice_enabled = st.checkbox("🔊 Activar respuesta por voz", value=st.session_state.voice_enabled)
+        st.session_state.voice_enabled = st.checkbox("🔊 Activar respuesta por voz (Masculina 1.5x)", value=st.session_state.voice_enabled)
 
         if not st.session_state.chat_messages:
             st.session_state.chat_messages = [
                 {"role": "assistant", "content": "¡Hola! 👋 Soy **Buddy**. Pregúntame lo que quieras."}
             ]
 
-        # Contenedor con altura en pixeles o porcentaje óptimo para móviles
         chat_container = st.container(height=380)
 
         with chat_container:
-            for msg in st.session_state.chat_messages:
+            for idx, msg in enumerate(st.session_state.chat_messages):
                 with st.chat_message(msg["role"]):
                     st.markdown(msg["content"])
                     if msg["role"] == "assistant" and "audio" in msg and msg["audio"]:
-                        st.audio(msg["audio"], format="audio/mp3")
+                        # Reproduce automáticamente solo el último mensaje de respuesta
+                        is_last = (idx == len(st.session_state.chat_messages) - 1)
+                        st.audio(msg["audio"], format="audio/mp3", autoplay=is_last)
 
         st.write("🎙️ **Graba tu pregunta:**")
         audio_bytes = audio_recorder(text="", recording_color="#e84118", neutral_color="#0077b6", icon_name="microphone", icon_size="2x")
@@ -539,7 +557,7 @@ if st.session_state.notes_content:
 
             system_context = f"""
             Eres Buddy, un tutor de estudio amigable.
-            Responde basándote EXCLUSIVAMENTE en el contenido de los apuntes.
+            Responde de forma clara y directa basándote EXCLUSIVAMENTE en el contenido de los apuntes.
 
             APUNTES:
             {st.session_state.notes_content}
@@ -552,7 +570,8 @@ if st.session_state.notes_content:
             
             audio_fp = None
             if st.session_state.voice_enabled:
-                audio_fp = text_to_speech_bytes(response_text)
+                # Genera la voz masculina (Álvaro) a velocidad +50% (1.5x)
+                audio_fp = text_to_speech_bytes(response_text, voice="es-ES-AlvaroNeural", rate="+50%")
 
             st.session_state.chat_messages.append({
                 "role": "assistant", 
