@@ -1,5 +1,6 @@
-google-genai
 streamlit
+google-genai
 PyPDF2
 python-dotenv
-Pillow
+gTTS
+audio-recorder-streamlit
