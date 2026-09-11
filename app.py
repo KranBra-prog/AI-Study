@@ -47,7 +47,7 @@ def extract_text_from_pdf(pdf_file):
 def safe_gemini_call(prompt):
     try:
         response = client.models.generate_content(
-            model="models/gemini-3.6-flash",
+            model='gemini-3.6-flash',
             contents=prompt,
         )
         return response.text
@@ -255,7 +255,7 @@ if submit_text or uploaded_file is not None:
     elif text_input.strip():
         st.session_state.notes_content = text_input.strip()
 
-    # Si se cargaron nuevos apuntes, reiniciamos la conversación del chat
+    # Si se cargan nuevos apuntes, reiniciamos la conversación del chat
     if previous_content != st.session_state.notes_content:
         st.session_state.chat_messages = [
             {"role": "assistant", "content": "¡Hola! 👋 Soy **Buddy**, tu tutor personal de estudio. Ya he leído tus apuntes. ¿Qué te gustaría consultar o repasar hoy?"}
@@ -406,24 +406,25 @@ if st.session_state.notes_content:
         st.subheader("💬 Consulta a tu Tutor Buddy")
         st.caption("Hazle preguntas directas a Buddy sobre el contenido de tus apuntes cargados.")
 
+        # 1. Cargar conversación inicial si el historial está vacío
         if not st.session_state.chat_messages:
             st.session_state.chat_messages = [
                 {"role": "assistant", "content": "¡Hola! 👋 Soy **Buddy**, tu tutor personal. Pregúntame lo que quieras sobre tus apuntes subidos."}
             ]
 
-        # Mostrar historial de mensajes
+        # 2. Renderizar primero todo el historial de la conversación
         for msg in st.session_state.chat_messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
-        # Entrada del usuario
+        # 3. Dibujar la barra de entrada de texto AL FINAL
         if user_prompt := st.chat_input("Escribe tu pregunta sobre los apuntes..."):
-            # Guardar y mostrar mensaje del usuario
+            # Guardar y mostrar el mensaje del alumno inmediatamente
             st.session_state.chat_messages.append({"role": "user", "content": user_prompt})
             with st.chat_message("user"):
                 st.markdown(user_prompt)
 
-            # Generar respuesta de Buddy
+            # Generar la respuesta del bot Buddy
             with st.chat_message("assistant"):
                 with st.spinner("Buddy está pensando..."):
                     system_context = f"""
@@ -440,7 +441,7 @@ if st.session_state.notes_content:
                     response_text = safe_gemini_call(system_context)
                     st.markdown(response_text)
 
-            # Guardar respuesta en el historial
+            # Guardar la respuesta en el historial
             st.session_state.chat_messages.append({"role": "assistant", "content": response_text})
 
 else:
