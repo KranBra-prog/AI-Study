@@ -7,6 +7,8 @@ import streamlit.components.v1 as components
 import PyPDF2
 from dotenv import load_dotenv
 from google import genai
+from gtts import gTTS
+from audio_recorder_streamlit import audio_recorder
 
 # Cargar variables de entorno
 load_dotenv()
@@ -15,7 +17,56 @@ load_dotenv()
 api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key) if api_key else None
 
-st.set_page_config(page_title="AI Study Buddy", page_icon="🤖", layout="centered")
+# --- CONFIGURACIÓN DE PÁGINA RESPONSIVA ---
+st.set_page_config(
+    page_title="AI Study Buddy",
+    page_icon="🤖",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
+
+# --- INYECCIÓN DE CSS RESPONSIVO PARA DISPOSITIVOS MÓVILES ---
+st.markdown("""
+    <style>
+    /* Ajustes generales para pantallas pequeñas */
+    @media (max-width: 768px) {
+        .main .block-container {
+            padding-left: 0.8rem !important;
+            padding-right: 0.8rem !important;
+            padding-top: 1rem !important;
+        }
+        
+        h1 {
+            font-size: 1.8rem !important;
+        }
+        
+        h2 {
+            font-size: 1.4rem !important;
+        }
+        
+        /* Ajustar los botones para toque táctil fácil */
+        .stButton button {
+            width: 100% !important;
+            min-height: 48px !important;
+            font-size: 16px !important;
+        }
+        
+        /* Ajustar pestañas superiores en móviles */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 2px !important;
+        }
+        .stTabs [data-baseweb="tab"] {
+            padding: 8px 10px !important;
+            font-size: 13px !important;
+        }
+    }
+    
+    /* Contenedores táctiles */
+    div[data-testid="stForm"] {
+        padding: 12px !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- ESTADO DE SESIÓN ---
 if "notes_content" not in st.session_state:
@@ -32,6 +83,10 @@ if "time_limit" not in st.session_state:
     st.session_state.time_limit = 60
 if "chat_messages" not in st.session_state:
     st.session_state.chat_messages = []
+if "summary_text" not in st.session_state:
+    st.session_state.summary_text = ""
+if "voice_enabled" not in st.session_state:
+    st.session_state.voice_enabled = True
 
 # --- FUNCIONES AUXILIARES ---
 
@@ -54,14 +109,38 @@ def safe_gemini_call(prompt):
     except Exception as e:
         return f"⚠️ **Error al generar respuesta:** {str(e)}"
 
+def text_to_speech_bytes(text):
+    try:
+        clean_text = text.replace("*", "").replace("#", "").replace("`", "")
+        tts = gTTS(text=clean_text, lang='es', tld='com')
+        fp = BytesIO()
+        tts.write_to_fp(fp)
+        fp.seek(0)
+        return fp
+    except Exception:
+        return None
+
+def transcribe_audio_bytes(audio_bytes):
+    try:
+        response = client.models.generate_content(
+            model='gemini-3.6-flash',
+            contents=[
+                "Transcribe de manera exacta el siguiente audio en español. Devuelve ÚNICAMENTE el texto transcrito sin explicaciones ni comillas.",
+                {"mime_type": "audio/wav", "data": audio_bytes}
+            ]
+        )
+        return response.text.strip()
+    except Exception as e:
+        return f"Error en transcripción: {str(e)}"
+
 def generate_summary(notes_text):
-    prompt = f"Eres un profesor experto. Genera un resumen conciso y bien estructurado de estos apuntes:\n\n{notes_text}"
+    prompt = f"Eres un profesor experto. Genera un resumen conciso, claro y bien estructurado de estos apuntes utilizando títulos y viñetas:\n\n{notes_text}"
     return safe_gemini_call(prompt)
 
 def generate_interactive_quiz(notes_text, num_questions=5):
     prompt = f"""
     Eres un profesor experto. Basándote en el siguiente texto, genera exactamente {num_questions} preguntas de opción múltiple.
-    DEBES responder ÚNICAMENTE en formato JSON válido, sin texto adicional.
+    DEBES responder ÚNICAMENTE en formato JSON válido, sin bloques de formato ni texto adicional.
 
     Estructura esperada:
     [
@@ -144,20 +223,21 @@ def generate_concept_map_dot(notes_text):
     return cleaned.strip()
 
 def render_flip_card(front_text, back_text, card_id):
+    # HTML/CSS de Flashcards adaptable a pantallas pequeñas
     card_html = f"""
     <!DOCTYPE html>
     <html>
     <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
     .flip-card {{
       background-color: transparent;
       width: 100%;
-      height: 200px;
+      height: 220px;
       perspective: 1000px;
-      margin-bottom: 20px;
+      margin-bottom: 15px;
       font-family: system-ui, -apple-system, sans-serif;
     }}
-
     .flip-card-inner {{
       position: relative;
       width: 100%;
@@ -169,11 +249,9 @@ def render_flip_card(front_text, back_text, card_id):
       box-shadow: 0 4px 12px rgba(0,0,0,0.15);
       border-radius: 12px;
     }}
-
     .flip-card.flipped .flip-card-inner {{
       transform: rotateY(180deg);
     }}
-
     .flip-card-front, .flip-card-back {{
       position: absolute;
       width: 100%;
@@ -185,56 +263,66 @@ def render_flip_card(front_text, back_text, card_id):
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      padding: 20px;
+      padding: 15px;
       box-sizing: border-box;
     }}
-
     .flip-card-front {{
       background-color: #2b2d42;
       color: #edf2f4;
       border: 2px solid #8d99ae;
     }}
-
     .flip-card-back {{
-      background-color: #d90429;
+      background-color: #0077b6;
       color: #ffffff;
       transform: rotateY(180deg);
     }}
-
     .hint {{
-      font-size: 12px;
-      opacity: 0.7;
+      font-size: 11px;
+      opacity: 0.8;
       margin-top: 10px;
     }}
     </style>
     </head>
     <body>
-
     <div class="flip-card" id="card-{card_id}" onclick="this.classList.toggle('flipped')">
       <div class="flip-card-inner">
         <div class="flip-card-front">
-          <strong style="font-size: 16px;">{front_text}</strong>
-          <span class="hint">👆 Haz clic para ver el reverso</span>
+          <strong style="font-size: 15px;">{front_text}</strong>
+          <span class="hint">👆 Toca para voltear</span>
         </div>
         <div class="flip-card-back">
-          <p style="font-size: 15px; margin: 0;">{back_text}</p>
-          <span class="hint">🔄 Haz clic para voltear</span>
+          <p style="font-size: 14px; margin: 0;">{back_text}</p>
+          <span class="hint">🔄 Toca para volver</span>
         </div>
       </div>
     </div>
-
     </body>
     </html>
     """
-    components.html(card_html, height=220)
+    components.html(card_html, height=240)
+
+def render_certificate(student_name, score, total):
+    cert_html = f"""
+    <div style="border: 6px double #2b2d42; padding: 15px; text-align: center; background-color: #f8f9fa; border-radius: 12px; margin-top: 15px;">
+        <h2 style="color: #0077b6; font-family: Georgia, serif; font-size: 1.3rem; margin-bottom: 5px;">📜 CERTIFICADO DE EXCELENCIA</h2>
+        <p style="font-size: 13px; color: #555;">Otorgado a:</p>
+        <h3 style="color: #2b2d42; text-transform: uppercase; font-size: 1.2rem; margin: 10px 0; border-bottom: 2px solid #0077b6; display: inline-block; padding-bottom: 3px;">{student_name}</h3>
+        <p style="font-size: 13px; color: #555;">Por completar la evaluación en <strong>AI Study Buddy</strong>.</p>
+        <div style="font-size: 16px; font-weight: bold; color: #28a745; margin: 10px 0;">
+            Calificación: {score} / {total} ({(score/total)*100:.1f}%)
+        </div>
+        <p style="font-size: 10px; color: #888; margin-top: 15px;">Emitido por Buddy IA</p>
+    </div>
+    """
+    st.markdown(cert_html, unsafe_allow_html=True)
 
 # --- INTERFAZ PRINCIPAL ---
 
 st.title("🤖 AI Study Buddy")
-st.caption("Sube tus apuntes y conviértelos en resúmenes, quizzes, tarjetas, mapas y chatea con tu tutor IA.")
+st.caption("Aprende a tu ritmo desde cualquier dispositivo.")
 
 if not api_key:
-    st.error("⚠️ No se encontró la GEMINI_API_KEY. Configúrala en Secrets (Streamlit Cloud) o en tu archivo .env.")
+    st.error("⚠️ No se encontró la GEMINI_API_KEY. Configúrala en Secrets o en tu archivo .env.")
     st.stop()
 
 # --- CARGA DE TEXTO ---
@@ -242,7 +330,7 @@ st.subheader("📄 Carga tus apuntes")
 uploaded_file = st.file_uploader("Sube tus apuntes (PDF o TXT)", type=["pdf", "txt"])
 
 with st.form("notes_form", clear_on_submit=False):
-    text_input = st.text_area("O pega directamente tus notas aquí:", height=150)
+    text_input = st.text_area("O pega directamente tus notas aquí:", height=120)
     submit_text = st.form_submit_button("Procesar Texto ↵")
 
 if submit_text or uploaded_file is not None:
@@ -255,40 +343,47 @@ if submit_text or uploaded_file is not None:
     elif text_input.strip():
         st.session_state.notes_content = text_input.strip()
 
-    # Si se cargan nuevos apuntes, reiniciamos la conversación del chat
     if previous_content != st.session_state.notes_content:
         st.session_state.chat_messages = [
-            {"role": "assistant", "content": "¡Hola! 👋 Soy **Buddy**, tu tutor personal de estudio. Ya he leído tus apuntes. ¿Qué te gustaría consultar o repasar hoy?"}
+            {"role": "assistant", "content": "¡Hola! 👋 Soy **Buddy**, tu tutor personal. Ya he leído tus apuntes. ¿Qué duda quieres resolver?"}
         ]
+        st.session_state.summary_text = ""
 
-# --- PESTAÑAS ---
+# --- PESTAÑAS RESPONSIVAS ---
 if st.session_state.notes_content:
-    st.success("✅ Apuntes cargados correctamente.")
+    st.success("✅ Apuntes cargados.")
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📌 Resumen", 
-        "❓ Quiz Interactivo", 
+        "❓ Quiz", 
         "🎴 Flashcards", 
-        "🗺️ Mapa Conceptual",
-        "💬 Chat con Buddy"
+        "🗺️ Mapa",
+        "💬 Chat"
     ])
 
     # 1. RESUMEN
     with tab1:
         st.subheader("Resumen de apuntes")
-        if st.button("Generar Resumen", type="primary"):
-            with st.spinner("Procesando resumen..."):
-                st.markdown(generate_summary(st.session_state.notes_content))
+        if st.button("Generar Resumen 📝", type="primary", use_container_width=True):
+            with st.spinner("Procesando..."):
+                st.session_state.summary_text = generate_summary(st.session_state.notes_content)
+
+        if st.session_state.summary_text:
+            st.markdown(st.session_state.summary_text)
+            st.download_button(
+                label="📥 Descargar Resumen (.md)",
+                data=st.session_state.summary_text,
+                file_name="Resumen_Apuntes_Buddy.md",
+                mime="text/markdown",
+                use_container_width=True
+            )
 
     # 2. QUIZ INTERACTIVO
     with tab2:
         st.subheader("Cuestionario Interactivo")
-        col_q, col_t = st.columns(2)
-        with col_q:
-            num_q = st.slider("Número de preguntas:", min_value=1, max_value=10, value=5)
-        with col_t:
-            seconds_per_q = st.number_input("Segundos por pregunta:", min_value=10, max_value=120, value=30)
+        num_q = st.slider("Número de preguntas:", min_value=1, max_value=10, value=5)
+        seconds_per_q = st.number_input("Segundos por pregunta:", min_value=10, max_value=120, value=30)
 
-        if st.button("🚀 Comenzar Quiz", type="primary"):
+        if st.button("🚀 Comenzar Quiz", type="primary", use_container_width=True):
             with st.spinner("Generando preguntas..."):
                 data = generate_interactive_quiz(st.session_state.notes_content, num_questions=num_q)
                 if data:
@@ -306,15 +401,7 @@ if st.session_state.notes_content:
 
             if not st.session_state.quiz_submitted:
                 percent_left = remaining / total_time
-                st.write(f"⏱️ **Tiempo restante:** `{remaining} segundos`")
-
-                if percent_left > 0.5:
-                    st.markdown("""<style>.stProgress > div > div > div > div { background-color: #28a745 !important; }</style>""", unsafe_allow_html=True)
-                elif percent_left > 0.2:
-                    st.markdown("""<style>.stProgress > div > div > div > div { background-color: #ffc107 !important; }</style>""", unsafe_allow_html=True)
-                else:
-                    st.markdown("""<style>.stProgress > div > div > div > div { background-color: #dc3545 !important; }</style>""", unsafe_allow_html=True)
-
+                st.write(f"⏱️ **Tiempo restante:** `{remaining} s`")
                 st.progress(percent_left)
 
                 if remaining == 0:
@@ -326,17 +413,18 @@ if st.session_state.notes_content:
 
             with st.form("quiz_form"):
                 for q_idx, q in enumerate(st.session_state.quiz_data):
-                    st.write(f"**Pregunta {q_idx + 1}:** {q['question']}")
+                    st.write(f"**{q_idx + 1}. {q['question']}**")
                     selected_option = st.radio(
-                        label=f"Selecciona una opción ({q_idx + 1}):",
+                        label=f"Opciones ({q_idx + 1}):",
                         options=q["options"],
                         key=f"q_{q_idx}",
-                        disabled=st.session_state.quiz_submitted
+                        disabled=st.session_state.quiz_submitted,
+                        label_visibility="collapsed"
                     )
                     st.session_state.quiz_answers[q_idx] = selected_option
                     st.write("---")
 
-                submit_quiz = st.form_submit_button("Enviar y Calificar 📝")
+                submit_quiz = st.form_submit_button("Enviar Respuestas 📝", use_container_width=True)
                 if submit_quiz:
                     st.session_state.quiz_submitted = True
                     st.rerun()
@@ -352,44 +440,55 @@ if st.session_state.notes_content:
 
                     if user_ans == correct_ans:
                         correct_count += 1
-                        st.success(f"**Pregunta {q_idx + 1}: CORRECTA ✅**")
+                        st.success(f"**P{q_idx + 1}: CORRECTA ✅**")
                     else:
-                        st.error(f"**Pregunta {q_idx + 1}: INCORRECTA ❌**")
+                        st.error(f"**P{q_idx + 1}: INCORRECTA ❌**")
                         st.write(f"👉 Tu respuesta: `{user_ans}`")
-                        st.write(f"✅ Respuesta correcta: `{correct_ans}`")
+                        st.write(f"✅ Correcta: `{correct_ans}`")
 
                     st.info(f"💡 **Explicación:** {q['explanation']}")
                     st.write("---")
 
                 score_percentage = (correct_count / total_q) * 100
-                st.metric(label="Puntuación Final", value=f"{correct_count} / {total_q}", delta=f"{score_percentage:.1f}%")
+                st.metric(label="Puntuación", value=f"{correct_count} / {total_q}", delta=f"{score_percentage:.1f}%")
 
                 if score_percentage >= 70:
                     st.balloons()
+                    student_name = st.text_input("Nombre para certificado:", value="Estudiante")
+                    if student_name:
+                        render_certificate(student_name, correct_count, total_q)
 
     # 3. FLASHCARDS
     with tab3:
-        st.subheader("🎴 Fichas de Estudio Interactivas")
-        num_f = st.slider("Número de fichas:", min_value=1, max_value=10, value=5)
+        st.subheader("🎴 Fichas de Estudio")
+        num_f = st.slider("Número de tarjetas:", min_value=1, max_value=10, value=5)
 
-        if st.button("Generar Flashcards 🎴", type="primary"):
-            with st.spinner("Generando tarjetas interactivas..."):
+        if st.button("Generar Flashcards 🎴", type="primary", use_container_width=True):
+            with st.spinner("Generando..."):
                 cards_data = generate_flashcards_json(st.session_state.notes_content, num_cards=num_f)
                 if cards_data:
                     st.session_state["flashcards_data"] = cards_data
 
         if "flashcards_data" in st.session_state:
-            st.info("💡 Haz clic sobre cualquier tarjeta para voltearla y descubrir el reverso.")
+            st.info("💡 Toca la tarjeta para ver el reverso.")
             for idx, card in enumerate(st.session_state["flashcards_data"]):
                 render_flip_card(card["front"], card["back"], card_id=idx)
 
+            csv_data = "Front,Back\n" + "\n".join([f'"{c["front"]}","{c["back"]}"' for c in st.session_state["flashcards_data"]])
+            st.download_button(
+                label="📥 Exportar Flashcards (.csv)",
+                data=csv_data,
+                file_name="flashcards_anki.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
     # 4. MAPA CONCEPTUAL
     with tab4:
-        st.subheader("🗺️ Esquema Conceptual de Apuntes")
-        st.caption("Diagrama jerárquico automatizado con Graphviz.")
+        st.subheader("🗺️ Esquema Conceptual")
 
-        if st.button("Generar Mapa Conceptual 🗺️", type="primary"):
-            with st.spinner("Diseñando diagrama..."):
+        if st.button("Generar Mapa 🗺️", type="primary", use_container_width=True):
+            with st.spinner("Diseñando..."):
                 dot_code = generate_concept_map_dot(st.session_state.notes_content)
                 if dot_code:
                     st.session_state["concept_map_dot"] = dot_code
@@ -398,50 +497,70 @@ if st.session_state.notes_content:
             try:
                 st.graphviz_chart(st.session_state["concept_map_dot"], use_container_width=True)
             except Exception:
-                st.error("⚠️ No se pudo estructurar el diagrama con Graphviz.")
+                st.error("⚠️ No se pudo generar el esquema.")
                 del st.session_state["concept_map_dot"]
 
-  # 5. CHAT CON BUDDY
+    # 5. CHAT CON BUDDY
     with tab5:
         st.subheader("💬 Consulta a tu Tutor Buddy")
-        st.caption("Hazle preguntas directas a Buddy sobre el contenido de tus apuntes cargados.")
+        st.session_state.voice_enabled = st.checkbox("🔊 Activar respuesta por voz", value=st.session_state.voice_enabled)
 
-        # Cargar mensaje inicial si la conversación está vacía
         if not st.session_state.chat_messages:
             st.session_state.chat_messages = [
-                {"role": "assistant", "content": "¡Hola! 👋 Soy **Buddy**, tu tutor personal. Pregúntame lo que quieras sobre tus apuntes subidos."}
+                {"role": "assistant", "content": "¡Hola! 👋 Soy **Buddy**. Pregúntame lo que quieras."}
             ]
 
-        # Contenedor con altura fija y scroll para aislar los mensajes
-        chat_container = st.container(height=450)
+        # Contenedor con altura en pixeles o porcentaje óptimo para móviles
+        chat_container = st.container(height=380)
 
         with chat_container:
             for msg in st.session_state.chat_messages:
                 with st.chat_message(msg["role"]):
                     st.markdown(msg["content"])
+                    if msg["role"] == "assistant" and "audio" in msg and msg["audio"]:
+                        st.audio(msg["audio"], format="audio/mp3")
 
-        # La barra de entrada queda fuera del contenedor de mensajes, justo debajo
-        if user_prompt := st.chat_input("Escribe tu pregunta sobre los apuntes..."):
-            # Registrar y renderizar el mensaje del usuario
-            st.session_state.chat_messages.append({"role": "user", "content": user_prompt})
-            
-            # Generar respuesta de Buddy
+        st.write("🎙️ **Graba tu pregunta:**")
+        audio_bytes = audio_recorder(text="", recording_color="#e84118", neutral_color="#0077b6", icon_name="microphone", icon_size="2x")
+
+        voice_prompt = None
+        if audio_bytes:
+            with st.spinner("Transcribiendo voz..."):
+                voice_prompt = transcribe_audio_bytes(audio_bytes)
+                if voice_prompt:
+                    st.info(f"🗣️ Transcripción: {voice_prompt}")
+
+        user_prompt = st.chat_input("Escribe tu pregunta...")
+
+        final_prompt = voice_prompt or user_prompt
+
+        if final_prompt:
+            st.session_state.chat_messages.append({"role": "user", "content": final_prompt})
+
             system_context = f"""
-            Eres Buddy, un tutor de estudio amigable, claro y didáctico.
-            Tu objetivo es responder a las preguntas del estudiante BASÁNDOTE EXCLUSIVAMENTE en el contenido de sus apuntes subidos.
-            Si la respuesta a la pregunta no está en los apuntes, indícalo amablemente.
+            Eres Buddy, un tutor de estudio amigable.
+            Responde basándote EXCLUSIVAMENTE en el contenido de los apuntes.
 
-            APUNTES DEL ESTUDIANTE:
+            APUNTES:
             {st.session_state.notes_content}
 
-            PREGUNTA DEL ESTUDIANTE:
-            {user_prompt}
+            PREGUNTA:
+            {final_prompt}
             """
-            response_text = safe_gemini_call(system_context)
-            st.session_state.chat_messages.append({"role": "assistant", "content": response_text})
             
-            # Recargar para actualizar la vista del chat_container con el nuevo mensaje abajo
+            response_text = safe_gemini_call(system_context)
+            
+            audio_fp = None
+            if st.session_state.voice_enabled:
+                audio_fp = text_to_speech_bytes(response_text)
+
+            st.session_state.chat_messages.append({
+                "role": "assistant", 
+                "content": response_text,
+                "audio": audio_fp
+            })
+
             st.rerun()
 
 else:
-    st.info("💡 Por favor, sube un archivo o escribe tus notas arriba para empezar.")
+    st.info("💡 Sube un archivo o escribe tus notas arriba para empezar.")
