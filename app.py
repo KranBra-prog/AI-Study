@@ -64,8 +64,8 @@ st.markdown("""
  /* Posicionar el micrófono a la izquierda del botón enter sin taparlo */
     iframe[title="audio_recorder_streamlit.audio_recorder"] {
         position: absolute !important;
-        bottom: 15px !important;
-        right: 60px !important;  /* Aumentado a 62px para dejar libre la flecha */
+        bottom: 25px !important;
+        right: 55px !important;  /* Aumentado a 62px para dejar libre la flecha */
         z-index: 999999 !important;
         width: 32px !important;
         height: 32px !important;
