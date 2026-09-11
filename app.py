@@ -101,14 +101,27 @@ def extract_text_from_pdf(pdf_file):
     return text
 
 def safe_gemini_call(prompt):
-    try:
-        response = client.models.generate_content(
-            model='gemini-3.6-flash',
-            contents=prompt,
-        )
-        return response.text
-    except Exception as e:
-        return f"⚠️ **Error al generar respuesta:** {str(e)}"
+    """Realiza la llamada a Gemini con reintentos y modelo de respaldo si la API se satura (503)."""
+    models_to_try = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-1.5-flash']
+    
+    for model_name in models_to_try:
+        for attempt in range(3):  # 3 reintentos por modelo
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                if response.text:
+                    return response.text
+            except Exception as e:
+                error_str = str(e)
+                # Si es un error de sobrecarga (503), esperar y reintentar
+                if "503" in error_str or "UNAVAILABLE" in error_str:
+                    time.sleep(1.5 * (attempt + 1))
+                else:
+                    break  # Si es otro tipo de error, intentar con el siguiente modelo
+                    
+    return "⚠️ **El servicio está experimentando alta demanda.** Por favor, intenta enviar tu pregunta de nuevo en unos segundos."
 
 def text_to_speech_bytes(text, voice="es-ES-AlvaroNeural", rate="+50%"):
     """
@@ -373,8 +386,8 @@ if st.session_state.notes_content:
         "📌 Resumen", 
         "❓ Quiz", 
         "🎴 Flashcards", 
-        "🗺️ Mapa",
-        "💬 Chat"
+        "🗺️ Mapa Conceptual",
+        "💬 Chat con Buddy"
     ])
 
     # 1. RESUMEN
@@ -552,7 +565,7 @@ if st.session_state.notes_content:
 
         final_prompt = voice_prompt or user_prompt
 
-        if final_prompt:
+       if final_prompt:
             st.session_state.chat_messages.append({"role": "user", "content": final_prompt})
 
             system_context = f"""
@@ -568,10 +581,10 @@ if st.session_state.notes_content:
             
             response_text = safe_gemini_call(system_context)
             
+            # Solo generar audio si NO es un mensaje de error
             audio_fp = None
-            if st.session_state.voice_enabled:
-                # Genera la voz masculina (Tomas) 
-                audio_fp = text_to_speech_bytes(response_text, voice="es-AR-TomasNeural", rate="+0%")
+            if st.session_state.voice_enabled and not response_text.startswith("⚠️"):
+                audio_fp = text_to_speech_bytes(response_text, voice="es-ES-AlvaroNeural", rate="+0%")
 
             st.session_state.chat_messages.append({
                 "role": "assistant", 
