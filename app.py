@@ -401,48 +401,47 @@ if st.session_state.notes_content:
                 st.error("⚠️ No se pudo estructurar el diagrama con Graphviz.")
                 del st.session_state["concept_map_dot"]
 
-    # 5. CHAT CON BUDDY
+  # 5. CHAT CON BUDDY
     with tab5:
         st.subheader("💬 Consulta a tu Tutor Buddy")
         st.caption("Hazle preguntas directas a Buddy sobre el contenido de tus apuntes cargados.")
 
-        # 1. Cargar conversación inicial si el historial está vacío
+        # Cargar mensaje inicial si la conversación está vacía
         if not st.session_state.chat_messages:
             st.session_state.chat_messages = [
                 {"role": "assistant", "content": "¡Hola! 👋 Soy **Buddy**, tu tutor personal. Pregúntame lo que quieras sobre tus apuntes subidos."}
             ]
 
-        # 2. Renderizar primero todo el historial de la conversación
-        for msg in st.session_state.chat_messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+        # Contenedor con altura fija y scroll para aislar los mensajes
+        chat_container = st.container(height=450)
 
-        # 3. Dibujar la barra de entrada de texto AL FINAL
+        with chat_container:
+            for msg in st.session_state.chat_messages:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
+
+        # La barra de entrada queda fuera del contenedor de mensajes, justo debajo
         if user_prompt := st.chat_input("Escribe tu pregunta sobre los apuntes..."):
-            # Guardar y mostrar el mensaje del alumno inmediatamente
+            # Registrar y renderizar el mensaje del usuario
             st.session_state.chat_messages.append({"role": "user", "content": user_prompt})
-            with st.chat_message("user"):
-                st.markdown(user_prompt)
+            
+            # Generar respuesta de Buddy
+            system_context = f"""
+            Eres Buddy, un tutor de estudio amigable, claro y didáctico.
+            Tu objetivo es responder a las preguntas del estudiante BASÁNDOTE EXCLUSIVAMENTE en el contenido de sus apuntes subidos.
+            Si la respuesta a la pregunta no está en los apuntes, indícalo amablemente.
 
-            # Generar la respuesta del bot Buddy
-            with st.chat_message("assistant"):
-                with st.spinner("Buddy está pensando..."):
-                    system_context = f"""
-                    Eres Buddy, un tutor de estudio amigable, claro y didáctico.
-                    Tu objetivo es responder a las preguntas del estudiante BASÁNDOTE EXCLUSIVAMENTE en el contenido de sus apuntes subidos.
-                    Si la respuesta a la pregunta no está en los apuntes, indícalo amablemente.
+            APUNTES DEL ESTUDIANTE:
+            {st.session_state.notes_content}
 
-                    APUNTES DEL ESTUDIANTE:
-                    {st.session_state.notes_content}
-
-                    PREGUNTA DEL ESTUDIANTE:
-                    {user_prompt}
-                    """
-                    response_text = safe_gemini_call(system_context)
-                    st.markdown(response_text)
-
-            # Guardar la respuesta en el historial
+            PREGUNTA DEL ESTUDIANTE:
+            {user_prompt}
+            """
+            response_text = safe_gemini_call(system_context)
             st.session_state.chat_messages.append({"role": "assistant", "content": response_text})
+            
+            # Recargar para actualizar la vista del chat_container con el nuevo mensaje abajo
+            st.rerun()
 
 else:
     st.info("💡 Por favor, sube un archivo o escribe tus notas arriba para empezar.")
