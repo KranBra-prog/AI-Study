@@ -62,6 +62,25 @@ st.markdown("""
     div[data-testid="stForm"] {
         padding: 12px !important;
     }
+
+    /* Posicionar el grabador de audio dentro de la barra de chat_input */
+div[data-testid="stChatInput"] {
+    position: relative !important;
+}
+
+/* Mueve el contenedor del micrófono al extremo derecho del input */
+div:has(> iframe[title="audio_recorder_streamlit.audio_recorder"]) {
+    position: fixed !important;
+    bottom: 28px !important;
+    right: 75px !important;
+    z-index: 999999 !important;
+    background: transparent !important;
+}
+
+/* Espaciado interno en el campo de texto para que las letras no pisen el ícono */
+div[data-testid="stChatInput"] textarea {
+    padding-right: 90px !important;
+}
     </style>
 """, unsafe_allow_html=True)
 
@@ -515,7 +534,7 @@ if st.session_state.notes_content:
                 st.error("⚠️ No se pudo generar el esquema.")
                 del st.session_state["concept_map_dot"]
 
-    # 5. CHAT CON BUDDY
+   # 5. CHAT CON BUDDY
     with tab5:
         st.subheader("💬 Consulta a tu Tutor Buddy")
         st.session_state.voice_enabled = st.checkbox("🔊 Activar respuesta por voz (Masculina 1.5x)", value=st.session_state.voice_enabled)
@@ -535,15 +554,19 @@ if st.session_state.notes_content:
                         is_last = (idx == len(st.session_state.chat_messages) - 1)
                         st.audio(msg["audio"], format="audio/mp3", autoplay=is_last)
 
-        st.write("🎙️ **Graba tu pregunta:**")
-        audio_bytes = audio_recorder(text="", recording_color="#e84118", neutral_color="#0077b6", icon_name="microphone", icon_size="2x")
+        # 🎤 Micrófono flotante estilizado como Gemini
+        audio_bytes = audio_recorder(
+            text="", 
+            recording_color="#ea4335", 
+            neutral_color="#444746", 
+            icon_name="microphone", 
+            icon_size="1x"
+        )
 
         voice_prompt = None
         if audio_bytes:
             with st.spinner("Transcribiendo voz..."):
                 voice_prompt = transcribe_audio_bytes(audio_bytes)
-                if voice_prompt:
-                    st.info(f"🗣️ Transcripción: {voice_prompt}")
 
         user_prompt = st.chat_input("Escribe tu pregunta...")
 
