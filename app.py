@@ -65,7 +65,7 @@ st.markdown("""
     iframe[title="audio_recorder_streamlit.audio_recorder"] {
         position: absolute !important;
         bottom: 20px !important; /* Subido de 8px a 15px */
-        right: 45px !important;  /* Movido más a la derecha, de 55px a 48px */
+        right: 40px !important;  /* Movido más a la derecha, de 55px a 48px */
         z-index: 999999 !important;
         width: 35px !important;
         height: 35px !important;
