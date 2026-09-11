@@ -47,7 +47,7 @@ def extract_text_from_pdf(pdf_file):
 def safe_gemini_call(prompt):
     try:
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model = genai.GenerativeModel('gemini-3.6-flash'),
             contents=prompt,
         )
         return response.text
