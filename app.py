@@ -65,7 +65,7 @@ st.markdown("""
     iframe[title="audio_recorder_streamlit.audio_recorder"] {
         position: absolute !important;
         bottom: 25px !important;
-        right: 55px !important;  /* Aumentado a 62px para dejar libre la flecha */
+        right: 55px !important; 
         z-index: 999999 !important;
         width: 32px !important;
         height: 32px !important;
@@ -566,7 +566,7 @@ if st.session_state.notes_content:
                 recording_color="#ea4335", 
                 neutral_color="#5f6368", 
                 icon_name="microphone", 
-                icon_size="2x"
+                icon_size="1x"
             )
 
         with col_input:
