@@ -578,7 +578,7 @@ if st.session_state.notes_content:
             audio_bytes = audio_recorder(
                 text="", 
                 recording_color="#ea4335", 
-                neutral_color="#5f6368", 
+                neutral_color="#ffffff",  # Cambiado a blanco para integrarse bien con el tema oscuro
                 icon_name="microphone", 
                 icon_size="1x"
             )
