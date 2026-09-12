@@ -9,7 +9,7 @@ import pypdf
 from dotenv import load_dotenv
 from google import genai
 import edge_tts
-from audio_recorder_streamlit import audio_recorder
+from st_mic_recorder import mic_recorder
 
 # Cargar variables de entorno
 load_dotenv()
@@ -73,19 +73,7 @@ st.markdown("""
         background: transparent !important;
     }
 
-   /* Forzar transparencia completa en el contenedor del grabador de voz */
-    iframe[title="audio_recorder_streamlit.audio_recorder"] {
-        background-color: transparent !important;
-        background: transparent !important;
-        transform: scale(0.75) !important;
-        transform-origin: center center !important;
-    }
-
-    /* Quitar fondos oscuros/negros dentro de las estructuras del iframe */
-    div[data-testid="stCustomComponentV1"] {
-        background-color: transparent !important;
-        background: transparent !important;
-    }
+  
 
     /* Margen a la derecha del texto para que no tape los botones */
     div[data-testid="stChatInput"] textarea {
@@ -570,26 +558,26 @@ if st.session_state.notes_content:
                         is_last = (idx == len(st.session_state.chat_messages) - 1)
                         st.audio(msg["audio"], format="audio/mp3", autoplay=is_last)
 
-        # Disposición alineada con columnas: Input de chat a la izquierda + Micrófono a la derecha
+        # Disposición con columnas
         col_input, col_mic = st.columns([0.85, 0.15])
 
         with col_mic:
-            # Grabador de audio dentro de su columna
-            audio_bytes = audio_recorder(
-                text="", 
-                recording_color="#ea4335", 
-                neutral_color="#ffffff",  # Cambiado a blanco para integrarse bien con el tema oscuro
-                icon_name="microphone", 
-                icon_size="1x"
+            # Grabador de audio sin fondos ni recuadros oscuros
+            audio = mic_recorder(
+                start_prompt="🎙️",
+                stop_prompt="⏹️",
+                key='recorder',
+                just_once=True,
+                use_container_width=True
             )
 
         with col_input:
             user_prompt = st.chat_input("Escribe tu pregunta...")
 
         voice_prompt = None
-        if audio_bytes:
+        if audio and "bytes" in audio and audio["bytes"]:
             with st.spinner("Transcribiendo voz..."):
-                voice_prompt = transcribe_audio_bytes(audio_bytes)
+                voice_prompt = transcribe_audio_bytes(audio["bytes"])
 
         final_prompt = voice_prompt or user_prompt
 
