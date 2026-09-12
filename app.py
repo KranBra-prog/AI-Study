@@ -348,7 +348,7 @@ def render_certificate(student_name, score, total):
 # --- INTERFAZ PRINCIPAL ---
 
 st.title("🤖 AI Study Buddy")
-st.caption("Aprende a tu ritmo desde cualquier dispositivo.")
+st.caption("Aprende a tu ritmo")
 
 if not api_key:
     st.error("⚠️ No se encontró la GEMINI_API_KEY. Configúrala en Secrets o en tu archivo .env.")
@@ -385,8 +385,8 @@ if st.session_state.notes_content:
         "📌 Resumen", 
         "❓ Quiz", 
         "🎴 Flashcards", 
-        "🗺️ Mapa",
-        "💬 Chat"
+        "🗺️ Haz un Mapa Conceptual",
+        "💬 Chat con Buddy"
     ])
 
     # 1. RESUMEN
