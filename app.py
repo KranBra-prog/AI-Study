@@ -5,7 +5,7 @@ import asyncio
 from io import BytesIO
 import streamlit as st
 import streamlit.components.v1 as components
-import PyPDF2
+import pypdf
 from dotenv import load_dotenv
 from google import genai
 import edge_tts
@@ -103,13 +103,20 @@ if "voice_enabled" not in st.session_state:
 # --- FUNCIONES AUXILIARES ---
 
 def extract_text_from_pdf(pdf_file):
-    reader = PyPDF2.PdfReader(pdf_file)
-    text = ""
-    for page in reader.pages:
-        extracted = page.extract_text()
-        if extracted:
-            text += extracted + "\n"
-    return text
+    try:
+        reader = pypdf.PdfReader(pdf_file)
+        text = ""
+        for page in reader.pages:
+            extracted = page.extract_text()
+            if extracted:
+                text += extracted + "\n"
+        return text
+    except pypdf.errors.PdfReadError:
+        st.error("⚠️ El archivo PDF está cifrado o requiere contraseña.")
+        return ""
+    except Exception as e:
+        st.error(f"⚠️ Error al leer el archivo PDF: {e}")
+        return ""
 
 def safe_gemini_call(prompt):
     """Maneja reintentos y respaldos automáticos si Gemini está sobrecargado (503)."""
