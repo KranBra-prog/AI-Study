@@ -1,6 +1,7 @@
 streamlit
 google-genai
-PyPDF2
 python-dotenv
+pypdf
+pycryptodome
 edge-tts
 audio-recorder-streamlit
