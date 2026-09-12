@@ -73,11 +73,19 @@ st.markdown("""
         background: transparent !important;
     }
 
-    /* Reducir el tamaño del micrófono de forma limpia */
-iframe[title="audio_recorder_streamlit.audio_recorder"] {
-    transform: scale(0.75) !important;
-    transform-origin: center center !important;
-}
+   /* Forzar transparencia completa en el contenedor del grabador de voz */
+    iframe[title="audio_recorder_streamlit.audio_recorder"] {
+        background-color: transparent !important;
+        background: transparent !important;
+        transform: scale(0.75) !important;
+        transform-origin: center center !important;
+    }
+
+    /* Quitar fondos oscuros/negros dentro de las estructuras del iframe */
+    div[data-testid="stCustomComponentV1"] {
+        background-color: transparent !important;
+        background: transparent !important;
+    }
 
     /* Margen a la derecha del texto para que no tape los botones */
     div[data-testid="stChatInput"] textarea {
