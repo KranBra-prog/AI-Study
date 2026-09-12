@@ -73,6 +73,12 @@ st.markdown("""
         background: transparent !important;
     }
 
+    /* Reducir el tamaño del micrófono de forma limpia */
+iframe[title="audio_recorder_streamlit.audio_recorder"] {
+    transform: scale(0.75) !important;
+    transform-origin: center center !important;
+}
+
     /* Margen a la derecha del texto para que no tape los botones */
     div[data-testid="stChatInput"] textarea {
         padding-right: 90px !important;
