@@ -5,3 +5,4 @@ pypdf
 pycryptodome
 edge-tts
 st-mic-recorder
+graphviz
