@@ -26,7 +26,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- INYECCIÓN DE CSS (RESPONSIVO + MICRÓFONO INTEGRADO ESTILO GEMINI) ---
+# --- INYECCIÓN DE CSS RESPONSIVO Y LIMPIO ---
 st.markdown("""
     <style>
     @media (max-width: 768px) {
@@ -56,28 +56,10 @@ st.markdown("""
         padding: 12px !important;
     }
 
-    /* Ajuste para que el contenedor del chat soporte elementos absolutos dentro de su área */
-    div[data-testid="stChatInput"] {
-        position: relative !important;
-    }
-
- /* Posicionar el micrófono a la izquierda del botón enter sin taparlo */
-    iframe[title="audio_recorder_streamlit.audio_recorder"] {
-        position: absolute !important;
-        bottom: 25px !important;
-        right: 55px !important; 
-        z-index: 999999 !important;
-        width: 32px !important;
-        height: 32px !important;
-        border: none !important;
+    /* Limpieza de fondos transparentes en componentes personalizados */
+    div[data-testid="stCustomComponentV1"] {
+        background-color: transparent !important;
         background: transparent !important;
-    }
-
-  
-
-    /* Margen a la derecha del texto para que no tape los botones */
-    div[data-testid="stChatInput"] textarea {
-        padding-right: 90px !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -105,6 +87,7 @@ if "voice_enabled" not in st.session_state:
 # --- FUNCIONES AUXILIARES ---
 
 def extract_text_from_pdf(pdf_file):
+    """Extrae texto de archivos PDF, incluyendo aquellos cifrados con permisos de lectura."""
     try:
         reader = pypdf.PdfReader(pdf_file)
         text = ""
@@ -114,15 +97,15 @@ def extract_text_from_pdf(pdf_file):
                 text += extracted + "\n"
         return text
     except pypdf.errors.PdfReadError:
-        st.error("⚠️ El archivo PDF está cifrado o requiere contraseña.")
+        st.error("⚠️ El archivo PDF está protegido con contraseña o tiene un cifrado no soportado.")
         return ""
     except Exception as e:
-        st.error(f"⚠️ Error al leer el archivo PDF: {e}")
+        st.error(f"⚠️ Error al procesar el PDF: {e}")
         return ""
 
 def safe_gemini_call(prompt):
-    """Maneja reintentos y respaldos automáticos si Gemini está sobrecargado (503)."""
-    models_to_try = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-1.5-flash']
+    """Maneja reintentos y respaldos automáticos si Gemini está sobrecargado (error 503)."""
+    models_to_try = ['gemini-2.5-flash', 'gemini-1.5-flash']
     
     for model_name in models_to_try:
         for attempt in range(3):
@@ -156,20 +139,20 @@ def text_to_speech_bytes(text, voice="es-ES-AlvaroNeural", rate="+50%"):
             return fp
 
         return asyncio.run(_generate_audio())
-    except Exception as e:
+    except Exception:
         return None
 
 def transcribe_audio_bytes(audio_bytes):
     try:
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model='gemini-2.5-flash',
             contents=[
                 "Transcribe de manera exacta el siguiente audio en español. Devuelve ÚNICAMENTE el texto transcrito sin explicaciones ni comillas.",
                 {"mime_type": "audio/wav", "data": audio_bytes}
             ]
         )
-        return response.text.strip()
-    except Exception as e:
+        return response.text.strip() if response.text else None
+    except Exception:
         return None
 
 def generate_summary(notes_text):
@@ -357,7 +340,7 @@ def render_certificate(student_name, score, total):
 # --- INTERFAZ PRINCIPAL ---
 
 st.title("🤖 AI Study Buddy")
-st.caption("Aprende a tu ritmo")
+st.caption("Aprende a tu ritmo desde cualquier dispositivo.")
 
 if not api_key:
     st.error("⚠️ No se encontró la GEMINI_API_KEY. Configúrala en Secrets o en tu archivo .env.")
@@ -381,7 +364,7 @@ if submit_text or uploaded_file is not None:
     elif text_input.strip():
         st.session_state.notes_content = text_input.strip()
 
-    if previous_content != st.session_state.notes_content:
+    if previous_content != st.session_state.notes_content and st.session_state.notes_content:
         st.session_state.chat_messages = [
             {"role": "assistant", "content": "¡Hola! 👋 Soy **Buddy**, tu tutor personal. Ya he leído tus apuntes. ¿Qué duda quieres resolver?"}
         ]
@@ -389,13 +372,13 @@ if submit_text or uploaded_file is not None:
 
 # --- PESTAÑAS RESPONSIVAS ---
 if st.session_state.notes_content:
-    st.success("✅ Apuntes cargados.")
+    st.success("✅ Apuntes cargados correctamente.")
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📌 Resumen", 
         "❓ Quiz", 
         "🎴 Flashcards", 
-        "🗺️ Haz un Mapa Conceptual",
-        "💬 Chat con Buddy"
+        "🗺️ Mapa",
+        "💬 Chat"
     ])
 
     # 1. RESUMEN
@@ -535,17 +518,17 @@ if st.session_state.notes_content:
             try:
                 st.graphviz_chart(st.session_state["concept_map_dot"], use_container_width=True)
             except Exception:
-                st.error("⚠️ No se pudo generar el esquema.")
+                st.error("⚠️ No se pudo renderizar el esquema visual.")
                 del st.session_state["concept_map_dot"]
 
-   # 5. CHAT CON BUDDY
+    # 5. CHAT CON BUDDY (CON MICRÓFONO INTEGRADO MEDIANTE COLUMNAS)
     with tab5:
         st.subheader("💬 Consulta a tu Tutor Buddy")
         st.session_state.voice_enabled = st.checkbox("🔊 Activar respuesta por voz (Masculina 1.5x)", value=st.session_state.voice_enabled)
 
         if not st.session_state.chat_messages:
             st.session_state.chat_messages = [
-                {"role": "assistant", "content": "¡Hola! 👋 Soy **Buddy**. Pregúntame lo que quieras."}
+                {"role": "assistant", "content": "¡Hola! 👋 Soy **Buddy**. Pregúntame lo que quieras sobre tus apuntes."}
             ]
 
         chat_container = st.container(height=380)
@@ -558,15 +541,14 @@ if st.session_state.notes_content:
                         is_last = (idx == len(st.session_state.chat_messages) - 1)
                         st.audio(msg["audio"], format="audio/mp3", autoplay=is_last)
 
-        # Disposición con columnas
-        col_input, col_mic = st.columns([0.85, 0.15])
+        # Entrada con columnas limpias (Chat Input + Micrófono nativo)
+        col_input, col_mic = st.columns([0.82, 0.18])
 
         with col_mic:
-            # Grabador de audio sin fondos ni recuadros oscuros
             audio = mic_recorder(
-                start_prompt="🎙️",
-                stop_prompt="⏹️",
-                key='recorder',
+                start_prompt="🎙️ Grabar",
+                stop_prompt="⏹️ Parar",
+                key='chat_mic',
                 just_once=True,
                 use_container_width=True
             )
