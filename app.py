@@ -536,7 +536,7 @@ if st.session_state.notes_content:
                 st.error("⚠️ No se pudo generar el esquema.")
                 del st.session_state["concept_map_dot"]
 
-    # 5. CHAT CON BUDDY
+   # 5. CHAT CON BUDDY
     with tab5:
         st.subheader("💬 Consulta a tu Tutor Buddy")
         st.session_state.voice_enabled = st.checkbox("🔊 Activar respuesta por voz (Masculina 1.5x)", value=st.session_state.voice_enabled)
@@ -556,17 +556,21 @@ if st.session_state.notes_content:
                         is_last = (idx == len(st.session_state.chat_messages) - 1)
                         st.audio(msg["audio"], format="audio/mp3", autoplay=is_last)
 
-       # Contenedor de entrada de texto + micrófono
-        user_prompt = st.chat_input("Escribe tu pregunta...")
-        
-        # Grabador de voz posicionado absolutamente sobre la barra
-        audio_bytes = audio_recorder(
-            text="", 
-            recording_color="#ea4335", 
-            neutral_color="#5f6368", 
-            icon_name="microphone", 
-            icon_size="1x"
-        )
+        # Disposición alineada con columnas: Input de chat a la izquierda + Micrófono a la derecha
+        col_input, col_mic = st.columns([0.85, 0.15])
+
+        with col_mic:
+            # Grabador de audio dentro de su columna
+            audio_bytes = audio_recorder(
+                text="", 
+                recording_color="#ea4335", 
+                neutral_color="#5f6368", 
+                icon_name="microphone", 
+                icon_size="2x"
+            )
+
+        with col_input:
+            user_prompt = st.chat_input("Escribe tu pregunta...")
 
         voice_prompt = None
         if audio_bytes:
