@@ -4,4 +4,4 @@ python-dotenv
 pypdf
 pycryptodome
 edge-tts
-audio-recorder-streamlit
+st-mic-recorder
