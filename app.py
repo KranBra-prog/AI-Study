@@ -9,7 +9,7 @@ import pypdf
 from dotenv import load_dotenv
 from google import genai
 import edge_tts
-from st_mic_recorder import mic_recorder
+from audio_recorder_streamlit import audio_recorder
 
 # Cargar variables de entorno
 load_dotenv()
@@ -26,7 +26,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- INYECCIÓN DE CSS RESPONSIVO Y LIMPIO ---
+# --- INYECCIÓN DE CSS RESPONSIVO Y CORRECCIÓN DE TRANSPARENCIA DEL MICRÓFONO ---
 st.markdown("""
     <style>
     @media (max-width: 768px) {
@@ -56,7 +56,14 @@ st.markdown("""
         padding: 12px !important;
     }
 
-    /* Limpieza de fondos transparentes en componentes personalizados */
+    /* Ocultar el recuadro negro del iframe de audio_recorder en fondo oscuro */
+    iframe[title="audio_recorder_streamlit.audio_recorder"] {
+        mix-blend-mode: lighten !important;
+        transform: scale(0.85) !important;
+        transform-origin: center center !important;
+        background-color: transparent !important;
+    }
+    
     div[data-testid="stCustomComponentV1"] {
         background-color: transparent !important;
         background: transparent !important;
@@ -220,30 +227,6 @@ def generate_flashcards_json(notes_text, num_cards=5):
     except Exception:
         return None
 
-def generate_concept_map_dot(notes_text):
-    prompt = f"""
-    Eres un diseñador de mapas conceptuales e infografías educativas.
-    Analiza el texto facilitado y genera un código Graphviz en formato DOT válido.
-
-    Instrucciones:
-    - Usa 'digraph G {{ ... }}'.
-    - Estilo de nodos: `node [shape=box, style="filled,rounded", color="#2b2d42", fontcolor=white, fontname="Helvetica"];`
-    - Diseña relaciones conceptuales claras.
-    - DEVUELVE ÚNICAMENTE EL CÓDIGO DOT SIN BLOQUES MARKDOWN NI TEXTO ADICIONAL.
-
-    Apuntes:
-    {notes_text}
-    """
-    raw_response = safe_gemini_call(prompt)
-    cleaned = raw_response.strip()
-    if cleaned.startswith("```dot"):
-        cleaned = cleaned[6:]
-    if cleaned.startswith("```"):
-        cleaned = cleaned[3:]
-    if cleaned.endswith("```"):
-        cleaned = cleaned[:-3]
-    return cleaned.strip()
-
 def render_flip_card(front_text, back_text, card_id):
     card_html = f"""
     <!DOCTYPE html>
@@ -373,11 +356,10 @@ if submit_text or uploaded_file is not None:
 # --- PESTAÑAS RESPONSIVAS ---
 if st.session_state.notes_content:
     st.success("✅ Apuntes cargados correctamente.")
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab5 = st.tabs([
         "📌 Resumen", 
         "❓ Quiz", 
         "🎴 Flashcards", 
-        "🗺️ Mapa",
         "💬 Chat"
     ])
 
@@ -504,24 +486,7 @@ if st.session_state.notes_content:
                 use_container_width=True
             )
 
-    # 4. MAPA CONCEPTUAL
-    with tab4:
-        st.subheader("🗺️ Esquema Conceptual")
-
-        if st.button("Generar Mapa 🗺️", type="primary", use_container_width=True):
-            with st.spinner("Diseñando..."):
-                dot_code = generate_concept_map_dot(st.session_state.notes_content)
-                if dot_code:
-                    st.session_state["concept_map_dot"] = dot_code
-
-        if "concept_map_dot" in st.session_state:
-            try:
-                st.graphviz_chart(st.session_state["concept_map_dot"], use_container_width=True)
-            except Exception:
-                st.error("⚠️ No se pudo renderizar el esquema visual.")
-                del st.session_state["concept_map_dot"]
-
-    # 5. CHAT CON BUDDY (CON MICRÓFONO INTEGRADO MEDIANTE COLUMNAS)
+    # 4. CHAT CON BUDDY
     with tab5:
         st.subheader("💬 Consulta a tu Tutor Buddy")
         st.session_state.voice_enabled = st.checkbox("🔊 Activar respuesta por voz (Masculina 1.5x)", value=st.session_state.voice_enabled)
@@ -541,25 +506,25 @@ if st.session_state.notes_content:
                         is_last = (idx == len(st.session_state.chat_messages) - 1)
                         st.audio(msg["audio"], format="audio/mp3", autoplay=is_last)
 
-        # Entrada con columnas limpias (Chat Input + Micrófono nativo)
-        col_input, col_mic = st.columns([0.82, 0.18])
+        # Layout horizontal alineado
+        col_input, col_mic = st.columns([0.85, 0.15])
 
         with col_mic:
-            audio = mic_recorder(
-                start_prompt="🎙️ Grabar",
-                stop_prompt="⏹️ Parar",
-                key='chat_mic',
-                just_once=True,
-                use_container_width=True
+            audio_bytes = audio_recorder(
+                text="", 
+                recording_color="#ea4335", 
+                neutral_color="#ffffff", 
+                icon_name="microphone", 
+                icon_size="1x"
             )
 
         with col_input:
             user_prompt = st.chat_input("Escribe tu pregunta...")
 
         voice_prompt = None
-        if audio and "bytes" in audio and audio["bytes"]:
+        if audio_bytes:
             with st.spinner("Transcribiendo voz..."):
-                voice_prompt = transcribe_audio_bytes(audio["bytes"])
+                voice_prompt = transcribe_audio_bytes(audio_bytes)
 
         final_prompt = voice_prompt or user_prompt
 
