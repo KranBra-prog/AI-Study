@@ -9,7 +9,6 @@ import pypdf
 from dotenv import load_dotenv
 from google import genai
 import edge_tts
-from audio_recorder_streamlit import audio_recorder
 
 # Cargar variables de entorno
 load_dotenv()
@@ -26,7 +25,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- INYECCIÓN DE CSS RESPONSIVO Y CORRECCIÓN DE TRANSPARENCIA DEL MICRÓFONO ---
+# --- INYECCIÓN DE CSS RESPONSIVO ---
 st.markdown("""
     <style>
     @media (max-width: 768px) {
@@ -54,19 +53,6 @@ st.markdown("""
     
     div[data-testid="stForm"] {
         padding: 12px !important;
-    }
-
-    /* Ocultar el recuadro negro del iframe de audio_recorder en fondo oscuro */
-    iframe[title="audio_recorder_streamlit.audio_recorder"] {
-        mix-blend-mode: lighten !important;
-        transform: scale(0.85) !important;
-        transform-origin: center center !important;
-        background-color: transparent !important;
-    }
-    
-    div[data-testid="stCustomComponentV1"] {
-        background-color: transparent !important;
-        background: transparent !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -133,6 +119,7 @@ def safe_gemini_call(prompt):
     return "⚠️ **El servicio está experimentando alta demanda.** Por favor, intenta de nuevo en unos momentos."
 
 def text_to_speech_bytes(text, voice="es-ES-AlvaroNeural", rate="+50%"):
+    """Genera audio de respuesta rápida con Edge-TTS."""
     try:
         clean_text = text.replace("*", "").replace("#", "").replace("`", "")
         
@@ -146,19 +133,6 @@ def text_to_speech_bytes(text, voice="es-ES-AlvaroNeural", rate="+50%"):
             return fp
 
         return asyncio.run(_generate_audio())
-    except Exception:
-        return None
-
-def transcribe_audio_bytes(audio_bytes):
-    try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=[
-                "Transcribe de manera exacta el siguiente audio en español. Devuelve ÚNICAMENTE el texto transcrito sin explicaciones ni comillas.",
-                {"mime_type": "audio/wav", "data": audio_bytes}
-            ]
-        )
-        return response.text.strip() if response.text else None
     except Exception:
         return None
 
@@ -506,30 +480,11 @@ if st.session_state.notes_content:
                         is_last = (idx == len(st.session_state.chat_messages) - 1)
                         st.audio(msg["audio"], format="audio/mp3", autoplay=is_last)
 
-        # Layout horizontal alineado
-        col_input, col_mic = st.columns([0.85, 0.15])
+        # Entrada de texto limpia y nativa
+        user_prompt = st.chat_input("Escribe tu pregunta...")
 
-        with col_mic:
-            audio_bytes = audio_recorder(
-                text="", 
-                recording_color="#ea4335", 
-                neutral_color="#ffffff", 
-                icon_name="microphone", 
-                icon_size="1x"
-            )
-
-        with col_input:
-            user_prompt = st.chat_input("Escribe tu pregunta...")
-
-        voice_prompt = None
-        if audio_bytes:
-            with st.spinner("Transcribiendo voz..."):
-                voice_prompt = transcribe_audio_bytes(audio_bytes)
-
-        final_prompt = voice_prompt or user_prompt
-
-        if final_prompt:
-            st.session_state.chat_messages.append({"role": "user", "content": final_prompt})
+        if user_prompt:
+            st.session_state.chat_messages.append({"role": "user", "content": user_prompt})
 
             system_context = f"""
             Eres Buddy, un tutor de estudio amigable.
@@ -539,7 +494,7 @@ if st.session_state.notes_content:
             {st.session_state.notes_content}
 
             PREGUNTA:
-            {final_prompt}
+            {user_prompt}
             """
             
             response_text = safe_gemini_call(system_context)
