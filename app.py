@@ -144,8 +144,10 @@ def extract_text_from_pdf(pdf_file):
         return ""
 
 def safe_gemini_call(prompt):
-    """Llamadas robustas con respaldo a Gemini."""
-    models_to_try = ['gemini-2.5-flash', 'gemini-1.5-flash']
+    """Llamada segura con nombres de modelos válidos y reintentos."""
+    # Modelos oficiales compatibles
+    models_to_try = ['gemini-1.5-flash', 'gemini-1.5-pro']
+    
     for model_name in models_to_try:
         for attempt in range(3):
             try:
@@ -157,11 +159,12 @@ def safe_gemini_call(prompt):
                     return response.text
             except Exception as e:
                 error_str = str(e)
-                if "503" in error_str or "UNAVAILABLE" in error_str:
-                    time.sleep(1.5 * (attempt + 1))
+                if any(err in error_str for err in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED"]):
+                    time.sleep(2 * (attempt + 1))
                 else:
                     break
-    return "⚠️ **El servicio está experimentando alta demanda.** Reintenta en unos momentos."
+                    
+    return "⚠️ **Gemini está saturado en este momento.** Espera unos segundos y vuelve a presionar el botón."
 
 def text_to_speech_bytes(text, voice="es-ES-AlvaroNeural", rate="+40%"):
     """Genera audio sintético en streaming."""
