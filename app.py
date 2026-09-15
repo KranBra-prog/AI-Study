@@ -28,14 +28,12 @@ st.set_page_config(
 # --- INYECCIÓN DE CSS AVANZADO ---
 st.markdown("""
     <style>
-    /* Importar fuente moderna */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
 
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
     }
 
-    /* Estilo del Header */
     .header-container {
         text-align: center;
         padding: 1.5rem 1rem;
@@ -61,16 +59,6 @@ st.markdown("""
         margin-top: 5px;
     }
 
-    /* Tarjetas de Métricas y Contenedores */
-    .metric-box {
-        background-color: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        padding: 12px;
-        text-align: center;
-    }
-
-    /* Botones y Cuestionarios */
     .stButton>button {
         border-radius: 10px !important;
         font-weight: 600 !important;
@@ -81,7 +69,6 @@ st.markdown("""
         transform: translateY(-2px);
     }
 
-    /* Pestañas estilizadas */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
     }
@@ -92,7 +79,6 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* Ajustes móviles */
     @media (max-width: 768px) {
         .main .block-container {
             padding: 0.8rem !important;
@@ -144,12 +130,11 @@ def extract_text_from_pdf(pdf_file):
         return ""
 
 def safe_gemini_call(prompt):
-    """Llamada segura con nombres de modelos válidos y reintentos."""
-    # Modelos oficiales compatibles
+    """Llamadas robustas con retroceso exponencial y modelos oficiales válidos."""
     models_to_try = ['gemini-1.5-flash', 'gemini-1.5-pro']
     
     for model_name in models_to_try:
-        for attempt in range(3):
+        for attempt in range(4):
             try:
                 response = client.models.generate_content(
                     model=model_name,
@@ -160,11 +145,12 @@ def safe_gemini_call(prompt):
             except Exception as e:
                 error_str = str(e)
                 if any(err in error_str for err in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED"]):
-                    time.sleep(2 * (attempt + 1))
+                    sleep_time = (2 ** attempt) + 1
+                    time.sleep(sleep_time)
                 else:
                     break
                     
-    return "⚠️ **Gemini está saturado en este momento.** Espera unos segundos y vuelve a presionar el botón."
+    return "⚠️ **El servicio de Gemini está saturado.** Por favor, espera 10 segundos y vuelve a presionar el botón."
 
 def text_to_speech_bytes(text, voice="es-ES-AlvaroNeural", rate="+40%"):
     """Genera audio sintético en streaming."""
@@ -182,14 +168,16 @@ def text_to_speech_bytes(text, voice="es-ES-AlvaroNeural", rate="+40%"):
     except Exception:
         return None
 
+@st.cache_data(show_spinner=False)
 def generate_summary(notes_text):
     prompt = f"Eres un profesor experto. Crea un resumen didáctico, bien estructurado con títulos claros, listas y emojis clave:\n\n{notes_text}"
     return safe_gemini_call(prompt)
 
+@st.cache_data(show_spinner=False)
 def generate_interactive_quiz(notes_text, num_questions=5):
     prompt = f"""
     Eres un profesor experto. Basándote en el siguiente texto, genera exactamente {num_questions} preguntas de opción múltiple.
-    DEBES responder ÚNICAMENTE en formato JSON válido, sin Markdown adicional.
+    DEBES responder ÚNICAMENTE en formato JSON válido, sin bloques de código Markdown.
 
     Estructura esperada:
     [
@@ -218,9 +206,10 @@ def generate_interactive_quiz(notes_text, num_questions=5):
     except Exception:
         return None
 
+@st.cache_data(show_spinner=False)
 def generate_flashcards_json(notes_text, num_cards=5):
     prompt = f"""
-    Eres un profesor experto. Crea exactamente {num_cards} fichas de estudio (flashcards) clave sobre estos apuntes.
+    Eres un profesor experto. Crea exactamente {num_cards} fichas de estudio (flashcards) sobre estos apuntes.
     DEBES responder ÚNICAMENTE en formato JSON válido.
 
     Estructura esperada:
@@ -374,11 +363,12 @@ with st.expander("📄 **Cargar o Cambiar Apuntes**", expanded=not bool(st.sessi
 
         if previous_content != st.session_state.notes_content and st.session_state.notes_content:
             st.session_state.chat_messages = [
-                {"role": "assistant", "content": "¡Hola! 👋 Ya he analizado tus apuntes. ¿En qué tema o concepto quieres profundizar hoy?"}
+                {"role": "assistant", "content": "¡Hola! 👋 Ya he analizado tus apuntes. ¿En qué tema quieres profundizar?"}
             ]
             st.session_state.summary_text = ""
             st.session_state.quiz_data = []
             st.session_state.card_index = 0
+            st.cache_data.clear()
             st.rerun()
 
 # --- MÉTRICAS DE CONTENIDO & PESTAÑAS ---
@@ -504,7 +494,7 @@ if st.session_state.notes_content:
                     if student_name:
                         render_certificate(student_name, correct_count, total_q)
 
-    # 3. FLASHCARDS CON NAVEGACIÓN PASO A PASO
+    # 3. FLASHCARDS
     with tab3:
         st.subheader("🎴 Modo de Estudio Interactivo")
         if "flashcards_data" not in st.session_state:
@@ -520,14 +510,11 @@ if st.session_state.notes_content:
             cards = st.session_state["flashcards_data"]
             idx = st.session_state.card_index
             
-            # Indicador de progreso
             st.progress((idx + 1) / len(cards))
             st.caption(f"Tarjeta **{idx + 1}** de **{len(cards)}**")
 
-            # Render tarjeta actual
             render_flip_card(cards[idx]["front"], cards[idx]["back"], card_id=idx)
 
-            # Controles paso a paso
             btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 1])
             with btn_col1:
                 if st.button("⬅️ Anterior", disabled=(idx == 0), use_container_width=True):
@@ -553,12 +540,11 @@ if st.session_state.notes_content:
                 use_container_width=True
             )
 
-    # 4. CHAT CON TUTOR E INTERACCIONES RÁPIDAS
+    # 4. CHAT INTERACTIVO
     with tab4:
         st.subheader("💬 Chat con Buddy")
         st.session_state.voice_enabled = st.checkbox("🔊 Activar lectura de voz", value=st.session_state.voice_enabled)
 
-        # Sugerencias Rápidas de Preguntas
         st.write("💡 **Sugerencias rápidas:**")
         sug_col1, sug_col2, sug_col3 = st.columns(3)
         quick_prompt = None
@@ -567,10 +553,10 @@ if st.session_state.notes_content:
                 quick_prompt = "¿Cuáles son los 3 puntos más importantes de estos apuntes?"
         with sug_col2:
             if st.button("💡 Simplifícalo", use_container_width=True):
-                quick_prompt = "Explícame el concepto más complejo de las notas como si tuviera 10 años."
+                quick_prompt = "Explícame el concepto más complejo como si tuviera 10 años."
         with sug_col3:
             if st.button("❓ Posibles preguntas", use_container_width=True):
-                quick_prompt = "¿Qué preguntas podría hacerme un profesor en un examen sobre este texto?"
+                quick_prompt = "¿Qué preguntas me podrían hacer en un examen sobre este texto?"
 
         chat_container = st.container(height=380)
 
@@ -582,7 +568,6 @@ if st.session_state.notes_content:
                         is_last = (idx == len(st.session_state.chat_messages) - 1)
                         st.audio(msg["audio"], format="audio/mp3", autoplay=is_last)
 
-        # Entrada por teclado limpia
         user_prompt = st.chat_input("Escribe tu duda...")
         final_prompt = quick_prompt or user_prompt
 
@@ -591,12 +576,12 @@ if st.session_state.notes_content:
 
             system_context = f"""
             Eres Buddy, un tutor pedagógico amable y claro.
-            Responde de forma concisa y directa utilizando únicamente la información de estos apuntes:
+            Responde de forma concisa utilizando únicamente los datos de estos apuntes:
 
             APUNTES:
             {st.session_state.notes_content}
 
-            PREGUNTA DEL ESTUDIANTE:
+            PREGUNTA:
             {final_prompt}
             """
             
